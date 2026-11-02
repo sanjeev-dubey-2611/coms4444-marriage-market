@@ -1,0 +1,16 @@
+uv run main.py --gui \
+--player 1 2 \
+--player 2 2 \
+--player 3 2 \
+--player 4 2 \
+--player 5 2 \
+--player 6 2 \
+--player 7 2 \
+--player 8 2 \
+--player 9 2 \
+--player 10 2 \
+--rounds 40 \
+--bonus 200 \
+--dims 5 \
+--monotonic 2 \
+--dist mixed
