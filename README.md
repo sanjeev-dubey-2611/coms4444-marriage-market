@@ -17,10 +17,12 @@ uv run main.py
 | `--player CODE COUNT` | `g 10` + `r 10` | Add COUNT people running player CODE. Repeatable. N is the total and must be even. |
 | `-t`, `--rounds` | `100` | Rounds of dating, t. |
 | `-B`, `--bonus` | `100` | Marriage bonus B. |
-| `-d`, `--dims` | `5` | Profile dimensions, d. |
+| `-d`, `--dims` | `5` | Profile dimensions, d. Ignored when a dim map sets d from its entries. |
 | `-m`, `--monotonic` | `2` | Number of monotonic dimensions, m <= d. They are the first m dimensions. |
 | `--dist` | `mixed` | Preset distribution P: `uniform`, `normal`, or `mixed`. |
-| `--dist-file PATH` | none | JSON file holding P as d rows of 11 probabilities (values 0-10). Overrides `--dist`. |
+| `--dist-file PATH` | none | JSON file holding a full P as d rows of 11 probabilities. Overrides `--dist` and dim maps. |
+| `--dim-dist MAP` | none | Per-dimension sources, e.g. `0:3,1:normal,2:7`. Sets `d` to the number of listed dims (must cover `0..d-1`). Overrides `--dist`. |
+| `--dim-dist-file [PATH]` | none | Same map from a JSON file. Flag alone uses `configs/dim_maps/default.json`. Sets `d` from the file. Overrides `--dist`. |
 | `--seed` | `4444` | Random seed, for repeatable runs. |
 | `--list-multiple` | `4` | Returned interest-list limit: ceil(multiple * sqrt(N)), capped at N-1. All eligible candidates stay visible. `0` disables the interest limit. |
 | `--timeout` | `1.0` | Per-call wall-clock budget for player code, in seconds. `0` disables. Relies on `SIGALRM`; a no-op on Windows. |
@@ -46,6 +48,21 @@ The presets for P are:
 
 A `--dist-file` is either a bare list of d rows, or `{"P": [...]}`. Each row
 has 11 probabilities, for values 0 through 10, and must sum to 1.
+
+### Per-dimension maps (staff)
+
+To assign a **different** distribution to each profile dimension, use a dim map:
+
+```
+uv run main.py --dim-dist 0:3,1:normal,2:7
+uv run main.py --dim-dist-file
+```
+
+`--dim-dist-file` with no path loads `configs/dim_maps/default.json`. The map
+must list every dimension from `0` to `d-1`; **`d` is taken from the map**.
+Sources are `uniform`, `normal`, `mixed`, or a group code whose
+`players/player_<k>/distribution.json` loaded successfully. Priority:
+`--dist-file` > dim map > `--dist`.
 
 With the same parameters, seed, roster order, and player code, the built-in
 players produce identical results and log contents. Each player has its own
@@ -161,8 +178,9 @@ group directory ends up as:
 
 ```
 players/player_4/
-  __init__.py     required - see below
-  player.py       class Player4(BasePlayer)
+  __init__.py          required - see below
+  player.py            class Player4(BasePlayer)
+  distribution.json    optional - see "Submitting a distribution" below
 ```
 
 Then run it with `--player 4 <count>`:
@@ -201,6 +219,40 @@ loud error:
 Anything that fails to import is printed as a warning and skipped, so a broken
 commit from your group never stops anyone else's run. Check for your code in
 the startup warnings before assuming it ran.
+
+### Submitting a distribution
+
+Each group may optionally submit **one** trait distribution: a probability
+mass function over values **0 through 10**.
+
+Put it at `players/player_<k>/distribution.json`. The template includes a
+starting example you can replace.
+
+**Requirements**
+
+- Exactly **11** nonnegative numbers (for 0, 1, …, 10).
+- They must **sum to 1** (floating-point slack of about `1e-6` is allowed).
+- **JSON only.** Accepted shapes:
+
+```json
+{"P": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05]}
+```
+
+or a bare list of 11 numbers:
+
+```json
+[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05]
+```
+
+**What this is / is not**
+
+- This is **one dimension's** distribution, not a full multi-dimension table.
+- Your file is identified by your **group code** (`player_4` → `4`).
+- Staff decide which dimension(s) use your row when they run the simulator.
+- You do **not** pick the dimension, and you do **not** submit `d` rows.
+
+Invalid or missing files are reported as a startup warning and skipped; they
+do not stop other groups' players from running.
 
 ### The interface
 

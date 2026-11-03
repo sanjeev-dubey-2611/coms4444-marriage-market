@@ -1,4 +1,6 @@
-from models.cli import settings
+import pytest
+
+from models.cli import DEFAULT_DIM_DIST_FILE, settings
 
 
 def test_defaults():
@@ -10,6 +12,8 @@ def test_defaults():
 	assert args.monotonic == 2
 	assert args.distribution == 'mixed'
 	assert args.dist_file is None
+	assert args.dim_dist is None
+	assert args.dim_dist_file is None
 	assert args.seed == 4444
 	assert args.timeout == 1.0
 	assert args.log == ''
@@ -35,3 +39,23 @@ def test_no_log_wins():
 def test_distribution_options():
 	assert settings(['--dist', 'uniform']).distribution == 'uniform'
 	assert settings(['--dist-file', 'p.json']).dist_file == 'p.json'
+	assert settings(['--dim-dist', '0:3,1:normal']).dim_dist == '0:3,1:normal'
+	assert settings(['--dim-dist', '0:3,1:normal']).dims == 2
+	assert settings(['--dim-dist-file']).dim_dist_file == DEFAULT_DIM_DIST_FILE
+	assert settings(['--dim-dist-file']).dims == 3
+
+
+def test_dim_dist_file_clamps_monotonic_to_inferred_dims():
+	args = settings(['--dim-dist', '0:uniform'])
+	assert args.dims == 1
+	assert args.monotonic == 1
+
+
+def test_dim_dist_conflicts_with_explicit_dims():
+	with pytest.raises(SystemExit):
+		settings(['--dim-dist', '0:3,1:normal', '-d', '5'])
+
+
+def test_dim_dist_flags_are_mutually_exclusive():
+	with pytest.raises(SystemExit):
+		settings(['--dim-dist', '0:3', '--dim-dist-file'])

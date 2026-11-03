@@ -30,6 +30,7 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
+from core.distributions import discover_distributions, distribution_from_sweep_value, warn_distribution_errors
 from core.engine import Engine
 from core.registry import discover
 
@@ -76,7 +77,23 @@ class Cell:
 
 	@property
 	def distribution_text(self) -> str:
-		return self.distribution if isinstance(self.distribution, str) else 'custom'
+		if isinstance(self.distribution, str):
+			return self.distribution
+		if isinstance(self.distribution, dict):
+			if 'P' in self.distribution:
+				return 'custom'
+			parts = [
+				f'{k}:{self.distribution[k]}'
+				for k in sorted(self.distribution, key=lambda x: int(x))
+			]
+			return 'compose:' + ','.join(parts)
+		if (
+			isinstance(self.distribution, list | tuple)
+			and self.distribution
+			and isinstance(self.distribution[0], str)
+		):
+			return 'compose:' + ','.join(self.distribution)
+		return 'custom'
 
 
 @dataclass
@@ -113,9 +130,18 @@ def _players_of(raw: Any) -> tuple[tuple[str, int], ...]:
 
 
 def _distribution_of(raw: Any) -> Any:
-	"""A preset name stays a string; an inline P becomes a hashable tuple."""
+	"""Keep presets, dim maps, and inline tables as stored in the config.
+
+	Resolution to a concrete Engine distribution happens in ``validate`` /
+	``_run_one``, so sweep labels can still show the dim map.
+	"""
 	if isinstance(raw, str):
 		return raw
+	if isinstance(raw, dict):
+		# Dim map {"0": "3"} or {"P": [...]}. Keep as plain dict for labels.
+		return {str(k): v for k, v in raw.items()}
+	if isinstance(raw, list) and raw and isinstance(raw[0], str) and ':' in raw[0]:
+		return list(raw)
 	return tuple(tuple(float(p) for p in row) for row in raw)
 
 
@@ -138,7 +164,13 @@ def _cell_from(raw: dict, defaults: dict, index: int) -> Cell:
 
 
 def _label_part(value: Any) -> str:
+	if isinstance(value, dict):
+		if 'P' in value:
+			return 'custom'
+		return 'compose'
 	if isinstance(value, list | tuple):
+		if value and isinstance(value[0], str) and ':' in value[0]:
+			return 'compose'
 		try:
 			return ''.join(f'{c}{n}' for c, n in _players_of(value))
 		except (TypeError, ValueError):
@@ -205,6 +237,12 @@ def _run_one(job: dict) -> dict:
 	# new players should use their private self.rng.
 	random.seed(job['seed'])
 
+	distribution, distribution_name = distribution_from_sweep_value(
+		job['distribution'],
+		dims=job['dims'],
+		monotonic=job['monotonic'],
+	)
+
 	results = Engine(
 		players=roster,
 		rounds=job['rounds'],
@@ -212,7 +250,8 @@ def _run_one(job: dict) -> dict:
 		dims=job['dims'],
 		monotonic=job['monotonic'],
 		seed=job['seed'],
-		distribution=job['distribution'],
+		distribution=distribution,
+		distribution_name=distribution_name,
 		timeout=job['timeout'],
 		keep_records=False,
 		list_multiple=job.get('list_multiple', 4.0),
@@ -260,6 +299,9 @@ def validate(config: SweepConfig) -> None:
 	for err in errors:
 		print(f"warning: player '{err.code}' failed to load - {err.message}", file=sys.stderr)
 
+	catalog, dist_errors = discover_distributions()
+	warn_distribution_errors(dist_errors)
+
 	for cell in config.cells:
 		unknown = [code for code, _ in cell.players if code not in available]
 		if unknown:
@@ -268,13 +310,20 @@ def validate(config: SweepConfig) -> None:
 				f"cell '{cell.label}' names unloadable player(s) {unknown}. Available: {codes}"
 			)
 		try:
+			distribution, distribution_name = distribution_from_sweep_value(
+				cell.distribution,
+				dims=cell.dims,
+				monotonic=cell.monotonic,
+				catalog=catalog,
+			)
 			Engine(
 				players=[available[cell.players[0][0]]] * cell.people,
 				rounds=cell.rounds,
 				bonus=cell.bonus,
 				dims=cell.dims,
 				monotonic=cell.monotonic,
-				distribution=cell.distribution,
+				distribution=distribution,
+				distribution_name=distribution_name,
 				seed=0,
 				timeout=0,
 				list_multiple=cell.list_multiple,

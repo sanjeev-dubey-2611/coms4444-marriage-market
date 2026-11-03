@@ -147,6 +147,7 @@ class Engine:
 		monotonic: int = 2,
 		seed: int = 4444,
 		distribution: str | Distribution = 'mixed',
+		distribution_name: str | None = None,
 		timeout: float = 1.0,
 		keep_records: bool = True,
 		list_multiple: float = 4.0,
@@ -168,10 +169,10 @@ class Engine:
 			raise ValueError('list_multiple must be finite and nonnegative.')
 
 		if isinstance(distribution, str):
-			self.distribution_name = distribution
+			self.distribution_name = distribution_name or distribution
 			self.distribution = build_distribution(distribution, dims, monotonic)
 		else:
-			self.distribution_name = 'custom'
+			self.distribution_name = distribution_name or 'custom'
 			self.distribution = validate_distribution(distribution, dims)
 
 		self.rng = random.Random(seed)

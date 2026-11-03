@@ -1,11 +1,11 @@
 import json
 import sys
 
+from core.distributions import distribution_from_settings
 from core.engine import Engine
 from core.registry import discover
 from models.cli import settings
 from models.player import Player
-from models.profile import load_distribution
 
 
 def build_roster(requested: list[tuple[str, int]]) -> list[type[Player]]:
@@ -48,9 +48,17 @@ def main() -> None:
 	args = settings()
 	roster = build_roster(args.players)
 
-	distribution = args.distribution
-	if args.dist_file:
-		distribution = load_distribution(args.dist_file, args.dims)
+	try:
+		distribution, distribution_name = distribution_from_settings(
+			distribution=args.distribution,
+			dims=args.dims,
+			monotonic=args.monotonic,
+			dist_file=args.dist_file,
+			dim_dist=args.dim_dist,
+			dim_dist_file=args.dim_dist_file,
+		)
+	except ValueError as exc:
+		raise SystemExit(f'error: {exc}') from exc
 
 	options = dict(
 		players=roster,
@@ -60,6 +68,7 @@ def main() -> None:
 		monotonic=args.monotonic,
 		seed=args.seed,
 		distribution=distribution,
+		distribution_name=distribution_name,
 		timeout=args.timeout,
 		keep_records=not args.summary_only,
 		list_multiple=args.list_multiple,

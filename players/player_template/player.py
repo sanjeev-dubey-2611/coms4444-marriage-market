@@ -9,6 +9,14 @@ Keep the ``__init__.py``. Discovery uses ``pkgutil.iter_modules``, which only
 reports directories that have one, so a group directory without it is silently
 invisible to the simulator - no error, just a player that never turns up.
 
+Optional: edit ``distribution.json`` in the same directory. That file is your
+group's one-dimension trait distribution - exactly 11 nonnegative
+probabilities for values 0 through 10, summing to 1. Use JSON:
+``{"P": [...]}`` or a bare list of 11 numbers. Staff may assign your row (or
+a preset) to individual profile dimensions when they run the simulator; you
+do not choose the dimension and you do not submit a full d x 11 table. See
+the README section "Submitting a distribution".
+
 This directory is not itself discovered - the registry only matches
 ``player_<digits>`` - so the template can never appear in a run as a competitor.
 """
