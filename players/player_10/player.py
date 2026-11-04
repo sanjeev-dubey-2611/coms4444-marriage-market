@@ -1,4 +1,4 @@
-"""Group 10's strategy: don't trust cheap talk, learn the pool."""
+"""Group 8's strategy: don't trust cheap talk, learn the pool."""
 
 from models.player import (
     Advertisement,
