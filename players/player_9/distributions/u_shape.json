@@ -1,0 +1,17 @@
+{
+  "name": "u_shape",
+  "description": "U-shaped with most mass at the extremes (0-1 and 9-10). Mismatched extremes cost 64-100 on a non-monotonic dimension; on a monotonic one, high values satisfy nearly everyone and low ideals are satisfied by anyone.",
+  "P": [
+    0.191489,
+    0.148936,
+    0.085106,
+    0.042553,
+    0.021277,
+    0.021277,
+    0.021277,
+    0.042553,
+    0.085106,
+    0.148936,
+    0.19149
+  ]
+}
