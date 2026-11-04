@@ -14,7 +14,7 @@ from models.player import Player as BasePlayer
 from models.profile import Profile
 
 
-class Player10(BasePlayer):
+class Player8(BasePlayer):
     def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
         super().__init__(snapshot, ctx)
         self.estimates: dict[int, float] = {}
