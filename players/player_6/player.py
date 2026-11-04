@@ -1,4 +1,5 @@
-"""Explore honestly, then adapt presentation and pursue positive-score matches."""
+"""Explore honestly (pursuing only standout matches early), then adapt
+presentation and pursue positive-score matches."""
 
 import math
 
@@ -21,6 +22,9 @@ class Player6(BasePlayer):
 		# Instance settings: penalty / B <= 0.8 leaves a 20% estimated margin.
 		self.exploration_fraction = 0.25
 		self.penalty_ratio = 0.8
+		# A match with penalty / B <= 0.5 is worth pursuing even while exploring,
+		# since waiting risks losing them to someone else.
+		self.strong_match_ratio = 0.5
 		self.max_projection_shift = 2
 		# Leave at least two rounds for a first date followed by a proposal.
 		self.exploration_rounds = min(
@@ -93,10 +97,11 @@ class Player6(BasePlayer):
 
 	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
 		if turn.round <= self.exploration_rounds:
-			# Prioritize unseen people without selecting for compatibility yet.
-			choices = list(candidates)
-			self.rng.shuffle(choices)
-			choices.sort(key=lambda c: c.dates)
+			# Meet new people first; among equally new people, the best ads first,
+			# so strong matches are more likely to turn up while exploring.
+			choices = sorted(
+				candidates, key=lambda c: (c.dates, self._candidate_penalty(c), c.index)
+			)
 		else:
 			choices = sorted(candidates, key=lambda c: (self._candidate_penalty(c), c.index))
 			choices = [
@@ -124,14 +129,23 @@ class Player6(BasePlayer):
 			projected.append(value)
 		return tuple(projected)
 
+	def _within_margin(self, penalty: float, max_penalty_ratio: float) -> bool:
+		return penalty <= max_penalty_ratio * self.bonus and penalty < self.bonus
+
 	def _acceptable(self, penalty: float) -> bool:
-		return penalty <= self.penalty_ratio * self.bonus and penalty < self.bonus
+		return self._within_margin(penalty, self.penalty_ratio)
+
+	def _strong_match(self, penalty: float) -> bool:
+		return self._within_margin(penalty, self.strong_match_ratio)
 
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
 		self._remember(date.partner, observed, stated_ideal)
+		penalty = self._penalty(observed, stated_ideal)
 		if date.round <= self.exploration_rounds:
-			return Decision()
-		if not self._acceptable(self._penalty(observed, stated_ideal)):
+			worth_pursuing = self._strong_match(penalty)
+		else:
+			worth_pursuing = self._acceptable(penalty)
+		if not worth_pursuing:
 			# Signals may change, so avoid permanently blocking on an estimate.
 			return Decision()
 		return Decision(again=True, propose=date.date_number >= 2)
