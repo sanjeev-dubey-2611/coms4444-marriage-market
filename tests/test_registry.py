@@ -36,11 +36,11 @@ def test_missing_init_is_reported(tmp_path, monkeypatch):
 
 
 def test_unimportable_group_is_reported_and_skipped(tmp_path, monkeypatch):
-	(tmp_path / 'player_8').mkdir()
-	(tmp_path / 'player_8' / '__init__.py').write_text('')
+	(tmp_path / 'player_99').mkdir()
+	(tmp_path / 'player_99' / '__init__.py').write_text('')
 	monkeypatch.setattr(registry, '_PLAYERS_DIR', tmp_path)
 
 	available, errors = discover()
-	assert '8' not in available
-	assert any(e.code == '8' for e in errors)
+	assert '99' not in available
+	assert any(e.code == '99' for e in errors)
 	assert 'g' in available
