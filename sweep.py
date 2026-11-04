@@ -30,7 +30,11 @@ from itertools import product
 from pathlib import Path
 from typing import Any
 
-from core.distributions import discover_distributions, distribution_from_sweep_value, warn_distribution_errors
+from core.distributions import (
+	discover_distributions,
+	distribution_from_sweep_value,
+	warn_distribution_errors,
+)
 from core.engine import Engine
 from core.registry import discover
 
