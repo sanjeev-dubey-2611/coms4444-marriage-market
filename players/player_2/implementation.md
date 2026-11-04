@@ -78,10 +78,10 @@ The list is cut at `self.list_limit`.
 
 Eight seeds, 10 Player 2s, 10 greedy and 10 random players, the default mixed distribution, with no faults:
 
-| Setting | New mean | New positive rate | Old mean | Old positive rate |
-| --- | --- | --- | --- | --- |
-| 100 rounds | 46.3 | 0.99 | 49.1 | 0.91 |
-| 10 rounds | 40.9 | 0.90 | 32.7 | 0.71 |
+| Setting    | New mean | New positive rate | Old mean | Old positive rate |
+| ---------- | -------- | ----------------- | -------- | ----------------- |
+| 100 rounds | 46.3     | 0.99              | 49.1     | 0.91              |
+| 10 rounds  | 40.9     | 0.90              | 32.7     | 0.71              |
 
 The new player does better on the primary goal, which is ending with positive happiness. On long runs its mean is a little lower. Lint passes and all 229 tests pass.
 
@@ -89,11 +89,11 @@ The new player does better on the primary goal, which is ending with positive ha
 
 When 10 copies of our player ran alone for 50 rounds, couples kept asking each other for repeat dates and only married near the end. Eight seeds, before and after the two new rules:
 
-| Setting | Mean | Positive rate | Average marriage round |
-| --- | --- | --- | --- |
-| Before, 10 Player 2s, 50 rounds | 33.8 | 0.80 | 44.3 |
-| After, 10 Player 2s, 50 rounds | 34.3 | 0.82 | 4.3 |
-| After, mixed roster, 100 rounds | 45.4 | 0.99 | not measured |
+| Setting                         | Mean | Positive rate | Average marriage round |
+| ------------------------------- | ---- | ------------- | ---------------------- |
+| Before, 10 Player 2s, 50 rounds | 33.8 | 0.80          | 44.3                   |
+| After, 10 Player 2s, 50 rounds  | 34.3 | 0.82          | 4.3                    |
+| After, mixed roster, 100 rounds | 45.4 | 0.99          | not measured           |
 
 About two people per seed still end unmarried. In every seed, none of the leftover pairs would have given both sides positive happiness, so these are true mismatches and not missed marriages. Limits of 2, 3 and 5 gave nearly the same results. Only the marriage round changed, so the default stays at 3.
 
