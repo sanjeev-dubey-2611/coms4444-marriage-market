@@ -1,6 +1,13 @@
 import uuid
 
-from models.player import Advertisement, Candidate, DateContext, GameContext, PlayerSnapshot, RoundContext
+from models.player import (
+	Advertisement,
+	Candidate,
+	DateContext,
+	GameContext,
+	PlayerSnapshot,
+	RoundContext,
+)
 from players.player_6.player import Player6
 
 
@@ -12,7 +19,9 @@ def make_player(rounds=20, bonus=100, limit=None):
 
 
 def date(round_number, number=1, partner=1):
-	return DateContext(round_number, 21 - round_number, partner, Advertisement(0, 5, 0, 5), number, False)
+	return DateContext(
+		round_number, 21 - round_number, partner, Advertisement(0, 5, 0, 5), number, False
+	)
 
 
 def test_exploration_then_adaptive_projection_and_legal_proposal():
