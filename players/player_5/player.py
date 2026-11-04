@@ -12,7 +12,8 @@ invisible to the simulator - no error, just a player that never turns up.
 This directory is not itself discovered - the registry only matches
 ``player_<digits>`` - so the template can never appear in a run as a competitor.
 """
-
+import math
+import statistics
 from models.player import (
 	Advertisement,
 	Candidate,
@@ -23,7 +24,40 @@ from models.player import (
 	RoundContext,
 )
 from models.player import Player as BasePlayer
-from models.profile import Profile
+from models.profile import Profile, happiness
+
+class DatedPartner:
+	def __init__(self):
+		self.profile, self.ideal, self.advertisement = None, None, None
+		self.profile_history, self.ideal_history, self.advertisement_history = [], [], []
+		self.date_requested_count = 0
+		self.date_accepted_count = 0
+		self.marriage_requested_count = 0
+
+	def update_information(self, profile: Profile, ideal: Profile, advertisement: Advertisement):
+		self.profile_history.append(profile)
+		self.ideal_history.append(ideal)
+		self.advertisement_history.append(advertisement)
+		self.date_accepted_count = self.date_accepted_count + 1
+		self.profile = self.profile_history[-1]
+		self.ideal = self.ideal_history[-1]
+		self.advertisement = self.advertisement_history[-1]
+
+	def update_request_counts(self, date_again, propose_again):
+		self.date_requested_count = self.date_requested_count + int(date_again)
+		self.marriage_requested_count = self.marriage_requested_count + int(propose_again)
+
+	def __str__(self):
+		aggregated_details = "\nprofile: {}, ideal:{}, advertisement:{}".format(
+			self.profile, self.ideal, self.advertisement
+		)
+		history_details = "profile_history:{}, ideal_history:{}, advertisement_history:{}".format(
+			self.profile_history, self.ideal_history, self.advertisement_history
+		)
+		interaction_details = "date_accepted_count:{}, date_requested_count:{}, marriage_requested_count:{}".format(
+			self.date_accepted_count, self.date_requested_count, self.marriage_requested_count
+		)
+		return "\n".join([aggregated_details, history_details, interaction_details])
 
 
 class Player5(BasePlayer):
@@ -53,19 +87,16 @@ class Player5(BasePlayer):
 		#   self.list_limit maximum returned names, or None if disabled
 		#
 		# The engine constructs you once, before round 1. Anything you want to
-		# carry between rounds lives on self, so initialise it here.
-		self.history: dict[int, list[Profile]] = {}
-		self.advertisement_tolerance = 1.0
-		self.repeat_tolerance = 3.0
-		self.incompatible_fraction = 0.50
-		self.again_fraction = 0.80
-		self.propose_fraction = 0.80
-		self.proposal_start_tolerance = 1.0
-
-	def _gap(self, dim: int, value: int) -> int:
-		"""Count only shortfalls in monotonic dimensions."""
-		gap = self.ideal[dim] - value
-		return max(0, gap) if dim < self.monotonic else abs(gap)
+		# carry between rounds lives on self, so initialize it here.
+		self.dated_partner_history: dict[int, DatedPartner] = {}
+		self.exploration_time_fraction = 0.2
+		self.exploration_people_fraction = 0.2
+		self.data_sanity_count = 1
+		self.exploration_mode = True
+		self.random_match_rate = math.ceil(self.rounds / self.people)
+		self.max_date_requests_per_person = 3 * self.random_match_rate
+		self.max_marriage_requests_per_person = 3 * self.random_match_rate
+		self.initial_k_std_away = 0.5
 
 	def advertise(self) -> Advertisement:
 		"""Called once, before round 1. Fixed for the whole simulation.
@@ -108,11 +139,33 @@ class Player5(BasePlayer):
 		Nobody is ever paired with someone either side marked incompatible, so
 		in rare cases you sit a round out.
 		"""
-		chosen = []
-		for candidate in candidates:
-			gap = self._gap(candidate.ad.own_dim, candidate.ad.own_value)
-			if gap <= self.advertisement_tolerance:
-				chosen.append(candidate.index)
+
+		print()
+		print("self.rounds", self.rounds, "self.people", self.people)
+		print("Turn:", turn)
+		time_criteria = turn.round / self.rounds < self.exploration_time_fraction
+		people_criteria = (self.people - turn.singles) / self.people < self.exploration_people_fraction
+		self.exploration_mode = time_criteria and people_criteria
+		self.mark_partners_out_of_system(candidates)
+
+		happiness_scores = dict(sorted(self.get_dated_partners_vs_happiness().items(), key=lambda item: item[1], reverse=True))
+		avg_happiness, std_happiness = 0, 0
+		if len(happiness_scores) > self.data_sanity_count:
+			avg_happiness, std_happiness = statistics.mean(happiness_scores.values()), statistics.stdev(happiness_scores.values())
+			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
+		good_partners = [p_idx for p_idx, p_score in happiness_scores.items() if p_score >= avg_happiness and p_score > 0]
+		unexplored_partners = [c.index for c in sorted(candidates, key=lambda x: x.dates, reverse=False)]
+
+		if self.exploration_mode:
+			print("[exploration mode]", "time_criteria:", time_criteria, "people_criteria:", people_criteria)
+			chosen = unexplored_partners
+			chosen = [x for x in chosen if x != self.index]
+		else:
+			print("[exploitation mode]", "time_criteria:", time_criteria, "people_criteria:", people_criteria)
+			chosen = good_partners
+			chosen = [x for x in chosen if x != self.index]
+
+		print("chosen:", chosen[: self.list_limit])
 		return chosen[: self.list_limit]
 
 	def project(self, date: DateContext) -> Profile:
@@ -155,20 +208,72 @@ class Player5(BasePlayer):
 		proposal, no incompatibility) for decide. Your failure never affects the
 		other groups.
 		"""
-		self.history.setdefault(date.partner, []).append(observed)
-		gaps = [self._gap(dim, value) for dim, value in enumerate(observed)]
-		far_dimensions = sum(gap > self.repeat_tolerance for gap in gaps)
-		if far_dimensions / self.dims >= self.incompatible_fraction:
-			return Decision(incompatible=True)
-
-		# Increase proposal tolerance from 1 to 3 points over the run.
+		print("current date details:", "id:", date.partner, "ad:", date.partner_ad, "date_number:", date.date_number)
+		if date.partner not in self.dated_partner_history:
+			self.dated_partner_history[date.partner] = DatedPartner()
+		self.dated_partner_history[date.partner].update_information(observed, stated_ideal, date.partner_ad)
+		happiness_scores = self.get_dated_partners_vs_happiness()
+		print("happiness_scores:", happiness_scores)
+		current_happiness = happiness_scores[date.partner]
+		avg_happiness, std_happiness = 0, 0
+		if len(happiness_scores) > self.data_sanity_count:
+			avg_happiness, std_happiness = statistics.mean(happiness_scores.values()), statistics.stdev(happiness_scores.values())
+			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
 		progress = (date.round - 1) / max(1, self.rounds - 1)
-		proposal_tolerance = self.proposal_start_tolerance + progress * (
-			self.repeat_tolerance - self.proposal_start_tolerance
+		k_std_away = self.initial_k_std_away * (1 - progress)
+		print(
+			"current_happiness:", current_happiness,
+			"date_again:", avg_happiness,
+			"k_std_away:", k_std_away,
+			"propose_again:", avg_happiness + k_std_away * std_happiness,
+			"never_again:", avg_happiness - 1.5 * std_happiness,
+			"Date History:", self.dated_partner_history[date.partner],
+			"max_marriage_requests_per_person", self.max_marriage_requests_per_person,
+			"max_date_requests_per_person", self.max_date_requests_per_person,
 		)
-		close_fraction = (self.dims - far_dimensions) / self.dims
-		proposal_matches = sum(gap <= proposal_tolerance for gap in gaps)
+		date_again = (
+			current_happiness >= avg_happiness and
+			current_happiness > 0 and
+			self.dated_partner_history[date.partner].date_requested_count < self.max_date_requests_per_person
+		)
+		propose_again = (
+			date.date_number >= 2 and
+			current_happiness >= (avg_happiness + k_std_away * std_happiness) and
+			current_happiness > 0 and
+			self.dated_partner_history[date.partner].marriage_requested_count < self.max_marriage_requests_per_person
+		)
+		never_again = (
+			current_happiness < (avg_happiness - 1.5 * std_happiness) or
+			self.dated_partner_history[date.partner].date_requested_count >= self.max_date_requests_per_person or
+			self.dated_partner_history[date.partner].marriage_requested_count >= self.max_marriage_requests_per_person
+		)
+		if self.exploration_mode:
+			date_again, propose_again, never_again = False, False, False
+		if never_again:
+			date_again, propose_again = False, False
+		self.dated_partner_history[date.partner].update_request_counts(date_again, propose_again)
+		print("date_again:", date_again, "propose_again:", propose_again, "never_again:", never_again, "\n\n")
 		return Decision(
-			again=close_fraction >= self.again_fraction,
-			propose=date.date_number >= 2 and proposal_matches / self.dims >= self.propose_fraction,
+			again=date_again,
+			propose=propose_again,
+			incompatible=never_again
 		)
+
+	def get_dated_partners_vs_happiness(self):
+		happiness_scores = dict()
+		for partner_id, partner_history in self.dated_partner_history.items():
+			partner_scores = list()
+			for partner_profile, partner_ideal in zip(partner_history.profile_history, partner_history.ideal_history):
+				score = happiness(self.bonus, self.profile, self.ideal, partner_profile, partner_ideal, self.monotonic)
+				partner_scores.append(score)
+			happiness_scores[partner_id] = min(partner_scores)
+		return happiness_scores
+
+	def mark_partners_out_of_system(self, candidates):
+		available_partners = [x.index for x in candidates]
+		self.dated_partner_history = {
+			partner_id: partner
+			for partner_id, partner in self.dated_partner_history.items()
+			if partner_id in available_partners
+		}
+		return
