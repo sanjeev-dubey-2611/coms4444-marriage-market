@@ -1,0 +1,17 @@
+{
+  "name": "near-constant",
+  "description": "Distribution with a high probability of a constant value and a low probability of other values.",
+  "P": [
+    0.002,
+    0.003,
+    0.005,
+    0.01,
+    0.02,
+    0.04,
+    0.05,
+    0.8,
+    0.05,
+    0.015,
+    0.005
+  ]
+}
