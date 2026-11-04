@@ -8,11 +8,15 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import multiprocessing as mp
+import platform
 import random
 import statistics
+import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -47,6 +51,52 @@ VARIANTS: dict[str, type[Player]] = {
 	'with_incompatible': Player3WithIncompatible,
 	'lie_first_mono': Player3LieFirstMono,
 }
+
+CONFIG_FIELDS = (
+	'players',
+	'rounds',
+	'bonus',
+	'dims',
+	'monotonic',
+	'distribution',
+	'timeout',
+	'list_multiple',
+)
+
+
+def source_metadata() -> dict:
+	"""Capture the code and runtime used by this evaluation, outside player code."""
+
+	def git(*args: str) -> str | None:
+		try:
+			return subprocess.check_output(
+				['git', *args],
+				cwd=ROOT,
+				text=True,
+				stderr=subprocess.DEVNULL,
+			).strip()
+		except (OSError, subprocess.CalledProcessError):
+			return None
+
+	paths = {
+		path
+		for directory in ('core', 'models', 'players')
+		for path in (ROOT / directory).rglob('*.py')
+		if not {'tests', 'tools'}.intersection(path.parts) and not path.name.startswith('test_')
+	}
+	paths.update((Path(__file__).resolve(), ROOT / 'uv.lock'))
+	return {
+		'created_at_utc': datetime.now(UTC).isoformat(),
+		'git_commit': git('rev-parse', 'HEAD'),
+		'git_branch': git('branch', '--show-current'),
+		'git_status': git('status', '--short'),
+		'python_version': platform.python_version(),
+		'platform': platform.platform(),
+		'source_sha256': {
+			path.relative_to(ROOT).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+			for path in sorted(paths)
+		},
+	}
 
 
 def _bootstrap_ci(values: list[float], n: int = 2000, alpha: float = 0.05) -> tuple[float, float]:
@@ -116,8 +166,10 @@ def _run_job(job: dict) -> dict:
 		'label': job['label'],
 		'variant': job['variant'],
 		'seed': job['seed'],
+		'config': {field: job[field] for field in CONFIG_FIELDS},
 		**m,
 		'faults': len(results['faults']),
+		'player_faults': sum(fault.startswith(f'{target_name}[') for fault in results['faults']),
 	}
 
 
@@ -153,6 +205,7 @@ def build_jobs(
 	seeds: list[int],
 	quick: bool,
 	ablation: bool,
+	variants: list[str] | None = None,
 ) -> list[dict]:
 	bonuses = [100] if quick or ablation else [50, 100, 200]
 	rounds_list = [100] if quick or ablation else [25, 100]
@@ -163,19 +216,24 @@ def build_jobs(
 			('vs_10', [('3v', 10), ('10', 10)]),
 			('vs_greedy', [('3v', 10), ('g', 10)]),
 		]
-		variants = list(VARIANTS)
+		default_variants = list(VARIANTS)
 	elif quick:
 		rosters = _arena_rosters(True)
-		variants = ['v1', 'default', 'all_on']
+		default_variants = ['v1', 'default', 'all_on']
 	else:
 		rosters = _arena_rosters(False)
-		variants = list(VARIANTS)
+		default_variants = list(VARIANTS)
+	selected_variants = default_variants if variants is None else variants
+	if not selected_variants or len(set(selected_variants)) != len(selected_variants):
+		raise ValueError('variants must be nonempty and unique')
+	if any(variant not in VARIANTS for variant in selected_variants):
+		raise ValueError('unknown evaluation variant')
 	jobs: list[dict] = []
 	for arena, players in rosters:
 		for bonus in bonuses:
 			for rounds in rounds_list:
 				for dist in dists:
-					for variant in variants:
+					for variant in selected_variants:
 						for seed in seeds:
 							jobs.append(
 								{
@@ -216,21 +274,33 @@ def aggregate(rows: list[dict]) -> list[dict]:
 
 def main() -> None:
 	parser = argparse.ArgumentParser(description='Evaluate Group 3 player variants.')
-	parser.add_argument('--seeds', type=int, default=10, help='Number of seeds (1..N).')
+	parser.add_argument('--seeds', type=int, default=10, help='Number of consecutive seeds.')
+	parser.add_argument('--seed-start', type=int, default=1, help='First seed (inclusive).')
+	parser.add_argument('--variants', nargs='+', choices=sorted(VARIANTS), help='Variants to run.')
 	parser.add_argument('--quick', action='store_true', help='Smaller grid for smoke runs.')
 	parser.add_argument('--ablation', action='store_true', help='All variants on key arenas.')
 	parser.add_argument('--workers', type=int, default=max(1, mp.cpu_count() - 1))
 	parser.add_argument('--out', type=Path, default=ROOT / 'results' / 'player_3_eval.json')
 	args = parser.parse_args()
+	if args.seeds < 1 or args.workers < 1:
+		parser.error('--seeds and --workers must be positive')
+	if args.variants is not None and len(set(args.variants)) != len(args.variants):
+		parser.error('--variants must not contain duplicates')
 
-	seeds = list(range(1, args.seeds + 1))
-	jobs = build_jobs(seeds=seeds, quick=args.quick, ablation=args.ablation)
+	seeds = list(range(args.seed_start, args.seed_start + args.seeds))
+	jobs = build_jobs(
+		seeds=seeds,
+		quick=args.quick,
+		ablation=args.ablation,
+		variants=args.variants,
+	)
+	metadata = source_metadata()
 	with mp.Pool(args.workers) as pool:
 		rows = pool.map(_run_job, jobs)
 
 	args.out.parent.mkdir(parents=True, exist_ok=True)
-	report = {'jobs': len(jobs), 'by_cell': aggregate(rows), 'raw': rows}
-	args.out.write_text(json.dumps(report, indent=2) + '\n')
+	report = {'metadata': metadata, 'jobs': len(jobs), 'by_cell': aggregate(rows), 'raw': rows}
+	args.out.write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
 
 	print(f'Wrote {args.out} ({len(jobs)} runs)')
 	# Headline: full vs v1 on self_play mixed B100 t100
