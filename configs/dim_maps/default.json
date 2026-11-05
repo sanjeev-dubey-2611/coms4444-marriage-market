@@ -1,5 +1,7 @@
 {
-  "0": "uniform",
-  "1": "normal",
-  "2": "mixed"
+  "0": "normal",
+  "1": "uniform",
+  "2": "normal",
+  "3": "uniform",
+  "4": "10"
 }

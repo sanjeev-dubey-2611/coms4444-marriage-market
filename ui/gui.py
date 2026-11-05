@@ -1,5 +1,6 @@
 """Participant-focused visualizer; player execution remains in the worker process."""
 
+import re
 from collections.abc import Callable
 
 import pygame
@@ -20,7 +21,23 @@ SPEEDS = (1, 2, 4, 8, 16, 32)
 FAULT_LOG_LIMIT, FAULT_FLASH_ROUNDS = 4, 3
 PROFILE_ROWS, HISTORY_ROWS = 8, 12
 HISTORY_ROW_H = 32
+SUMMARY_ROWS = 18
+SUMMARY_ROW_H = 30
 STRIPE = (249, 243, 232)
+_GROUP_FROM_NAME = re.compile(r'(?:Player)?(\d+)$', re.IGNORECASE)
+
+
+def group_label(name: str) -> str:
+	"""Group number/code shown in the summary tab (e.g. Player4 -> 4, GreedyPlayer -> g)."""
+	match = _GROUP_FROM_NAME.search(name.replace('_', ''))
+	if match:
+		return match.group(1)
+	lower = name.lower()
+	if 'greedy' in lower:
+		return 'g'
+	if 'random' in lower:
+		return 'r'
+	return name
 
 
 def trait_penalty(actual, desired, monotonic):
@@ -92,16 +109,21 @@ class Visualizer:
 		self.record = None
 		self.playing, self.finished = False, engine.finished
 		self.speed_index, self.selected = 1, 0
+		self.tab = 'participant'  # or 'summary'
 		self.input_focus = 'participant'
 		self.person_buffer = self.goto_buffer = ''
 		self.person_error = self.goto_error = self.jump_target = None
 		self.profile_offset = self.history_offset = self.history_selected = 0
+		self.summary_offset = 0
 		self.fault_log, self.last_fault_round, self.fonts = [], -10, {}
 		self.person_box = pygame.Rect(152, 86, 100, 30)
 		self.show_button = pygame.Rect(264, 86, 65, 30)
 		self.round_box = pygame.Rect(720, 86, 100, 30)
+		self.tab_participant = pygame.Rect(1080, 86, 120, 30)
+		self.tab_summary = pygame.Rect(1210, 86, 110, 30)
 		self.participant_panel = pygame.Rect(18, 148, 1324, 668)
 		self.history_area = pygame.Rect(380, 350, 946, HISTORY_ROWS * HISTORY_ROW_H)
+		self.summary_area = pygame.Rect(34, 220, 1288, SUMMARY_ROWS * SUMMARY_ROW_H)
 		self.histories = [[] for _ in range(engine.people)] if isinstance(engine, Engine) else None
 		if self.histories is not None:
 			for record in engine.records:
@@ -131,6 +153,9 @@ class Visualizer:
 			self.worker.inspect(person)
 
 	def type_key(self, key, unicode):
+		if key == pygame.K_t:
+			self.tab = 'summary' if self.tab == 'participant' else 'participant'
+			return
 		if key == pygame.K_TAB:
 			self.input_focus = 'round' if self.input_focus == 'participant' else 'participant'
 			return
@@ -146,11 +171,15 @@ class Visualizer:
 		elif key in (pygame.K_RETURN, pygame.K_KP_ENTER) and value:
 			if self.input_focus == 'participant':
 				self.select_person(int(value))
+				self.tab = 'participant'
 			else:
 				self.jump_to(int(value))
 			setattr(self, name, '')
 		elif key in (pygame.K_PAGEUP, pygame.K_PAGEDOWN):
 			direction = -1 if key == pygame.K_PAGEUP else 1
+			if self.tab == 'summary':
+				self.scroll_summary(direction * SUMMARY_ROWS)
+				return
 			self.profile_offset = max(
 				0,
 				min(
@@ -160,13 +189,26 @@ class Visualizer:
 			)
 
 	def select_at(self, pos):
+		if self.tab_participant.collidepoint(pos):
+			self.tab = 'participant'
+			return
+		if self.tab_summary.collidepoint(pos):
+			self.tab = 'summary'
+			return
 		if self.person_box.collidepoint(pos):
 			self.input_focus = 'participant'
 		elif self.round_box.collidepoint(pos):
 			self.input_focus = 'round'
 		elif self.show_button.collidepoint(pos) and self.person_buffer:
 			self.select_person(int(self.person_buffer))
-		elif self.history_area.collidepoint(pos):
+			self.tab = 'participant'
+		elif self.tab == 'summary' and self.summary_area.collidepoint(pos):
+			index = self.summary_offset + (pos[1] - self.summary_area.y) // SUMMARY_ROW_H
+			rows = self.marriage_summary()
+			if index < len(rows):
+				self.select_person(rows[index][0])
+				self.tab = 'participant'
+		elif self.tab == 'participant' and self.history_area.collidepoint(pos):
 			index = self.history_offset + (pos[1] - self.history_area.y) // HISTORY_ROW_H
 			if index < len(self.history()):
 				self.history_selected = index
@@ -176,10 +218,40 @@ class Visualizer:
 			0, min(self.history_offset + direction, max(0, len(self.history()) - HISTORY_ROWS))
 		)
 
+	def scroll_summary(self, direction):
+		self.summary_offset = max(
+			0,
+			min(
+				self.summary_offset + direction,
+				max(0, len(self.marriage_summary()) - SUMMARY_ROWS),
+			),
+		)
+
+	def marriage_summary(self) -> list[tuple[int, str, int, str, float, int | None]]:
+		"""Married people as (id, group, partner_id, partner_group, happiness, married_on)."""
+		e = self.engine
+		rows = []
+		for i, partner in enumerate(e.spouse):
+			if partner is None:
+				continue
+			rows.append(
+				(
+					i,
+					group_label(e.player_names[i]),
+					partner,
+					group_label(e.player_names[partner]),
+					e.happiness(i),
+					e.married_on[i],
+				)
+			)
+		rows.sort(key=lambda row: (-row[4], row[0]))
+		return rows
+
 	def render_key(self):
 		return (
 			self.engine.round,
 			self.selected,
+			self.tab,
 			self.playing,
 			self.speed_index,
 			self.finished,
@@ -192,6 +264,8 @@ class Visualizer:
 			self.profile_offset,
 			self.history_offset,
 			self.history_selected,
+			self.summary_offset,
+			len(self.marriage_summary()),
 			getattr(self.engine, 'participant', self.selected),
 			len(self.history()),
 		)
@@ -239,10 +313,91 @@ class Visualizer:
 			(834, 94),
 			'tiny',
 			WARN if self.goto_error else INK_DIM,
-			width=508,
+			width=230,
 		)
 		if self.person_error:
 			self.text(surface, self.person_error, (18, 123), 'tiny', WARN)
+		self.draw_tabs(surface)
+
+	def draw_tabs(self, surface):
+		for label, rect, name in (
+			('Participant', self.tab_participant, 'participant'),
+			('Summary', self.tab_summary, 'summary'),
+		):
+			active = self.tab == name
+			pygame.draw.rect(surface, PANEL if active else BACKDROP_DARK, rect, border_radius=6)
+			pygame.draw.rect(
+				surface, GOLD if active else PANEL_EDGE, rect, 2 if active else 1, border_radius=6
+			)
+			self.text(
+				surface,
+				label,
+				rect.center,
+				'small',
+				GOLD if active else INK_DIM,
+				anchor='center',
+			)
+
+	def draw_summary(self, surface):
+		rows = self.marriage_summary()
+		self.text(surface, 'Marriage outcomes so far', (34, 170), 'mid')
+		self.text(
+			surface,
+			'Sorted by happiness (high → low) · Click a row to open that participant · T toggles tab',
+			(340, 176),
+			'small',
+			INK_DIM,
+			width=960,
+		)
+		columns = [
+			(34, 70, 'Player'),
+			(120, 90, 'Group'),
+			(230, 100, 'Partner'),
+			(350, 110, 'Partner group'),
+			(480, 140, 'Happiness'),
+			(650, 120, 'Married round'),
+		]
+		for x, width, label in columns:
+			self.text(surface, label, (x, self.summary_area.y - 22), 'small', INK_DIM, width=width)
+		if not rows:
+			self.text(surface, 'No marriages yet.', (34, 280), 'mid', INK_DIM)
+			return
+		for row, (person, group, partner, partner_group, score, married_on) in enumerate(
+			rows[self.summary_offset : self.summary_offset + SUMMARY_ROWS]
+		):
+			line_y = self.summary_area.y + row * SUMMARY_ROW_H
+			pygame.draw.rect(
+				surface,
+				STRIPE if row % 2 == 0 else PANEL,
+				(self.summary_area.x - 3, line_y - 2, self.summary_area.w, SUMMARY_ROW_H),
+				border_radius=3,
+			)
+			color = GOOD if score > 0 else (ALERT if score < 0 else INK)
+			values = [
+				person,
+				group,
+				partner,
+				partner_group,
+				f'{score:,.2f}',
+				married_on if married_on is not None else '—',
+			]
+			for value, (x, width, _) in zip(values, columns, strict=True):
+				self.text(
+					surface,
+					value,
+					(x, line_y + 4),
+					'small',
+					color if x == 480 else INK,
+					width=width,
+				)
+		if len(rows) > SUMMARY_ROWS:
+			self.text(
+				surface,
+				f'Showing {self.summary_offset + 1}–{min(self.summary_offset + SUMMARY_ROWS, len(rows))} of {len(rows)} · Scroll / Page Up/Down',
+				(34, self.summary_area.bottom + 12),
+				'tiny',
+				INK_DIM,
+			)
 
 	def draw(self, surface):
 		surface.fill(BACKDROP)
@@ -250,11 +405,14 @@ class Visualizer:
 		self.draw_controls(surface)
 		pygame.draw.rect(surface, PANEL, self.participant_panel, border_radius=10)
 		pygame.draw.rect(surface, PANEL_EDGE, self.participant_panel, 2, border_radius=10)
-		self.draw_participant(surface)
+		if self.tab == 'summary':
+			self.draw_summary(surface)
+		else:
+			self.draw_participant(surface)
 		pygame.draw.rect(surface, BACKDROP_DARK, (0, HEIGHT - FOOTER_H, WIDTH, FOOTER_H))
 		self.text(
 			surface,
-			'SPACE play/pause   RIGHT/S step   UP/DOWN speed   P select ID   G skip   Q quit',
+			'SPACE play/pause   RIGHT/S step   UP/DOWN speed   T summary   P select ID   G skip   Q quit',
 			(18, HEIGHT - 32),
 			'tiny',
 			INK_DIM,
@@ -616,7 +774,10 @@ def run_gui(
 				elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
 					view.select_at(event.pos)
 				elif event.type == pygame.MOUSEWHEEL:
-					view.scroll_history(-event.y)
+					if view.tab == 'summary':
+						view.scroll_summary(-event.y)
+					else:
+						view.scroll_history(-event.y)
 			if not running:
 				break
 			if view is None:
