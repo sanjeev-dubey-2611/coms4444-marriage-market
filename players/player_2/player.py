@@ -1,299 +1,533 @@
+"""Group 2: population learning, soft suspicion, and conditional deception.
+
+Defaults selected using mixed markets with N=50, B=150, T=250.
+All learned state is private to each instance.
+"""
+
 import math
+from dataclasses import dataclass
 
 from models.player import (
-	Advertisement,
-	Candidate,
-	DateContext,
-	DateOutcome,
-	Decision,
-	GameContext,
-	PlayerSnapshot,
-	RoundContext,
+    Advertisement,
+    Candidate,
+    DateContext,
+    DateOutcome,
+    Decision,
+    GameContext,
+    PlayerSnapshot,
+    RoundContext,
 )
 from models.player import Player as BasePlayer
-from models.profile import MAX_VALUE, VALUES, Profile, decrement
-
-# Prior for every dimension: a discretised normal, worth this many observations.
-PRIOR_MEAN = 5.0
-PRIOR_SD = 2.0
-PRIOR_WEIGHT = 10.0
-
-# Monotonic dimensions are where liars inflate values. An observed value above
-# the prior mean counts for less, down to (1 - MONO_LIAR_DISCOUNT) at value 10.
-MONO_LIAR_DISCOUNT = 0.5
-
-# Synthetic people drawn from the learned distributions each round, used to
-# build the distribution of scores the threshold is read from.
-SAMPLE_SIZE = 200
-
-# The threshold is the gamma * TOP_QUANTILE quantile of the score distribution.
-TOP_QUANTILE = 0.95
-
-# Hard cap on the observe phase, as a fraction of rounds (the classic 37%), so
-# a short run never spends all its time observing.
-OBSERVE_ROUND_CAP = 0.37
-
-# After more than this many dates with the same person, stop waiting: propose
-# if their estimate is positive and has not dropped, otherwise walk away.
-REPEAT_PROPOSE_AFTER = 3
-
-# Two profiles whose centred cosine similarity reaches this are treated as a match.
-SIMILARITY_CUTOFF = 0.98
+from models.profile import VALUES, Profile, decrement
 
 
-def _normal_prior() -> list[float]:
-	weights = [math.exp(-((v - PRIOR_MEAN) ** 2) / (2 * PRIOR_SD**2)) for v in VALUES]
-	total = sum(weights)
-	return [PRIOR_WEIGHT * w / total for w in weights]
+@dataclass(frozen=True)
+class StrategyConfig:
+    # Population estimation.
+    seed_weight: float = 1.0
+    smoothing: float = 0.0
+
+    # Observation phase.
+    observe_sqrt: float = 0.5
+    observe_sample_fraction: float = 0.25
+    observe_round_fraction: float = 0.37
+    reserve_rounds: int = 2
+
+    # Date selection and acceptance.
+    interest_multiple: float = 1.0
+    sample_size: int = 50
+    top_quantile: float = 0.95
+
+    # Soft suspicion penalty.
+    change_weight: float = 1.0
+    ad_weight: float = 1.0
+    copy_weight: float = 0.15
+    similarity_cutoff: float = 0.98
+    suspicion_decay: float = 0.8
+    suspicion_cap: float = 3.0
+    penalty_per_dimension: float = 2.0
+
+    # Conditional deception.
+    deception_enabled: bool = False
+    late_fraction: float = 0.7
+    min_samples: int = 5
+    demand_gap: float = 4.0
+    max_shift: int = 2
+    max_lie_dimensions: int = 2
+    min_perceived_gain: float = 5.0
 
 
-def _similar(a: Profile, b: Profile) -> bool:
-	"""True if a and b are equal, or nearly parallel once centred on the middle value.
+def similar(a: Profile, b: Profile, cutoff: float) -> bool:
+    if tuple(a) == tuple(b):
+        return True
 
-	Centring matters: raw 0-10 vectors are all positive, so their plain cosine
-	similarity is high even for unrelated profiles.
-	"""
-	if tuple(a) == tuple(b):
-		return True
-	mid = MAX_VALUE / 2
-	ca = [x - mid for x in a]
-	cb = [x - mid for x in b]
-	na = math.sqrt(sum(x * x for x in ca))
-	nb = math.sqrt(sum(x * x for x in cb))
-	if na == 0 or nb == 0:
-		return False
-	return sum(x * y for x, y in zip(ca, cb, strict=True)) / (na * nb) >= SIMILARITY_CUTOFF
+    ca = [v - 5 for v in a]
+    cb = [v - 5 for v in b]
+    norm = math.sqrt(
+        sum(v * v for v in ca) * sum(v * v for v in cb)
+    )
+
+    return bool(
+        norm
+        and sum(x * y for x, y in zip(ca, cb, strict=True)) / norm
+        >= cutoff
+    )
+
+
+class Population:
+    """One sample per partner; repeat reports replace earlier reports."""
+
+    def __init__(self, own: Profile, config: StrategyConfig) -> None:
+        self.counts = [
+            [config.smoothing for _ in VALUES] for _ in own
+        ]
+
+        for row, value in zip(self.counts, own, strict=True):
+            row[value] += config.seed_weight
+
+        self.reports: dict[int, Profile] = {}
+        self.effective_samples = [0] * len(own)
+
+    def update(self, partner: int, report: Profile) -> None:
+        previous = self.reports.get(partner)
+
+        for dim, value in enumerate(report):
+            if previous is not None:
+                self.counts[dim][previous[dim]] -= 1.0
+            else:
+                self.effective_samples[dim] += 1
+
+            self.counts[dim][value] += 1.0
+
+        self.reports[partner] = tuple(report)
+
+    def probabilities(self) -> list[list[float]]:
+        return [
+            [value / sum(row) for value in row]
+            for row in self.counts
+        ]
 
 
 class Player2(BasePlayer):
-	"""Honest, liar-aware, distribution-aware, observe-then-choose player.
+    def __init__(
+        self,
+        snapshot: PlayerSnapshot,
+        ctx: GameContext,
+        config: StrategyConfig | None = None,
+    ) -> None:
+        super().__init__(snapshot, ctx)
 
-	Honest: advertises its most extreme non-monotonic value and wish, projects its
-	true profile and describes its true ideal.
+        self.config = config or StrategyConfig()
+        self.traits = Population(self.profile, self.config)
+        self.preferences = Population(self.ideal, self.config)
 
-	Distribution-aware: keeps a per-dimension histogram of values, seeded with a
-	normal prior and updated from ads and projections. High values in monotonic
-	dimensions are discounted, since that is where liars inflate.
+        self.suspicion: dict[int, float] = {}
+        self.evidence: dict[int, dict[str, float]] = {}
+        self.estimates: dict[int, float] = {}
+        self.personas: dict[int, Profile] = {}
+        self.my_described: dict[int, Profile] = {}
+        self.proposed_to_me: set[int] = set()
+        self.deceptions_started = 0
 
-	Liar-aware: flags people whose projection or stated ideal changes between
-	dates, whose stated ideal mirrors our projection, or whose projection mirrors
-	an ideal we described earlier. Liars are never proposed to or asked for.
+        # Last observable count; repeat-date contexts do not provide it.
+        self.singles = self.people
 
-	Observe-then-choose: observes until it has dated floor(sqrt(N)) unique people,
-	then proposes to the first person whose estimate meets a threshold that decays
-	with gamma = min(rounds_left, singles - 1) / (N - 1).
-	"""
+        self.observe_target, self.observe_deadline = (
+            self._observation_limits()
+        )
+        self.observing = self.observe_deadline > 0
+        self.ad = self._advertisement()
+        self._refresh_model()
 
-	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
-		super().__init__(snapshot, ctx)
-		# Per-person memory.
-		self.estimates: dict[int, float] = {}
-		self.estimate_history: dict[int, list[float]] = {}
-		self.projections: dict[int, list[Profile]] = {}
-		self.stated_ideals: dict[int, list[Profile]] = {}
-		self.my_described: dict[int, list[Profile]] = {}
-		self.liars: set[int] = set()
-		self.proposed_to_me: set[int] = set()
-		self.best_estimate = -math.inf
+    def _observation_limits(self) -> tuple[int, int]:
+        c = self.config
 
-		# Per-dimension value histograms (pseudo-counts over 0-10).
-		self.counts = [_normal_prior() for _ in range(self.dims)]
-		self.ads_seen: set[int] = set()
-		self.projections_seen: set[int] = set()
+        target = min(
+            self.people - 1,
+            max(1, math.ceil(c.observe_sqrt * math.sqrt(self.people))),
+            max(1, math.floor(c.observe_sample_fraction * self.rounds)),
+        )
 
-		# Observe phase.
-		self.observe_target = max(1, math.isqrt(self.people))
-		self.observe_round_cap = max(1, math.ceil(OBSERVE_ROUND_CAP * self.rounds))
-		self.observing = True
+        deadline = max(
+            0,
+            min(
+                math.floor(c.observe_round_fraction * self.rounds),
+                self.rounds - c.reserve_rounds,
+            ),
+        )
 
-		# Threshold inputs, refreshed each round.
-		self.singles = self.people
-		self.sample_scores: list[float] = []
-		self.expected_mine: list[float] = [0.0] * self.dims
-		self.expected_theirs: list[float] = [0.0] * self.dims
-		self._refresh_model()
+        return target, deadline
 
-	# ------------------------------------------------------------------ honesty
+    def _update_phase(self, round_number: int) -> None:
+        if (
+            len(self.traits.reports) >= self.observe_target
+            or round_number >= self.observe_deadline
+        ):
+            self.observing = False
 
-	def advertise(self) -> Advertisement:
-		"""Show our most extreme non-monotonic value and ask for our most extreme
-		non-monotonic wish. Both are true, and honesty there helps both sides."""
-		free = range(self.monotonic, self.dims)
-		showable = free if len(free) else range(self.dims)
-		own = max(showable, key=lambda i: (abs(self.profile[i] - PRIOR_MEAN), -i))
-		seek = max(showable, key=lambda i: (abs(self.ideal[i] - PRIOR_MEAN), -i))
-		return Advertisement(
-			own_dim=own, own_value=self.profile[own], seek_dim=seek, seek_value=self.ideal[seek]
-		)
+    def _advertisement(self) -> Advertisement:
+        free = range(self.monotonic, self.dims) or range(self.dims)
 
-	def describe_ideal(self, date: DateContext, observed: Profile) -> Profile:
-		self.my_described.setdefault(date.partner, []).append(self.ideal)
-		return self.ideal
+        if self.monotonic:
+            own = max(
+                range(self.monotonic),
+                key=lambda i: (self.profile[i], -i),
+            )
+        else:
+            own = max(
+                free,
+                key=lambda i: (abs(self.profile[i] - 5), -i),
+            )
 
-	# ------------------------------------------------------------ distributions
+        seek = max(
+            free,
+            key=lambda i: (abs(self.ideal[i] - 5), -i),
+        )
 
-	def _observe_value(self, dim: int, value: int) -> None:
-		weight = 1.0
-		if dim < self.monotonic and value > PRIOR_MEAN:
-			weight -= MONO_LIAR_DISCOUNT * (value - PRIOR_MEAN) / (MAX_VALUE - PRIOR_MEAN)
-		self.counts[dim][value] += weight
+        return Advertisement(
+            own,
+            self.profile[own],
+            seek,
+            self.ideal[seek],
+        )
 
-	def _gap(self, dim: int, want: int, have: int) -> int:
-		gap = want - have
-		if dim < self.monotonic and gap <= 0:
-			return 0
-		return gap * gap
+    def advertise(self) -> Advertisement:
+        return self.ad
 
-	def _refresh_model(self) -> None:
-		"""Recompute expected per-dimension costs and the sampled score distribution."""
-		probs = []
-		for dim in range(self.dims):
-			total = sum(self.counts[dim])
-			probs.append([c / total for c in self.counts[dim]])
-		self.expected_mine = [
-			sum(p * self._gap(d, self.ideal[d], v) for v, p in zip(VALUES, probs[d], strict=True))
-			for d in range(self.dims)
-		]
-		self.expected_theirs = [
-			sum(p * self._gap(d, v, self.profile[d]) for v, p in zip(VALUES, probs[d], strict=True))
-			for d in range(self.dims)
-		]
-		scores = []
-		for _ in range(SAMPLE_SIZE):
-			profile = tuple(self.rng.choices(VALUES, weights=probs[d])[0] for d in range(self.dims))
-			ideal = tuple(self.rng.choices(VALUES, weights=probs[d])[0] for d in range(self.dims))
-			scores.append(self._score(profile, ideal))
-		self.sample_scores = scores
+    def _gap(self, dim: int, want: int, have: int) -> int:
+        gap = want - have
+        return max(0, gap) ** 2 if dim < self.monotonic else gap**2
 
-	# ---------------------------------------------------------------- estimates
+    def _score(self, profile: Profile, ideal: Profile) -> float:
+        # Always use our true profile, even when projecting a persona.
+        return (
+            self.bonus
+            - decrement(self.ideal, profile, self.monotonic)
+            - 0.5 * decrement(ideal, self.profile, self.monotonic)
+        )
 
-	def _score(self, their_profile: Profile, their_ideal: Profile) -> float:
-		mine = decrement(self.ideal, their_profile, self.monotonic)
-		theirs = decrement(their_ideal, self.profile, self.monotonic)
-		return self.bonus - mine - theirs / 2
+    def _refresh_model(self) -> None:
+        self.trait_probs = self.traits.probabilities()
+        self.preference_probs = self.preferences.probabilities()
 
-	def _ad_score(self, ad: Advertisement) -> float:
-		"""Expected score of someone we have not dated: the ad's two dimensions are
-		taken as stated, every other dimension is the learned expectation."""
-		mine = sum(self.expected_mine)
-		mine += self._gap(ad.own_dim, self.ideal[ad.own_dim], ad.own_value)
-		mine -= self.expected_mine[ad.own_dim]
-		theirs = sum(self.expected_theirs)
-		theirs += self._gap(ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim])
-		theirs -= self.expected_theirs[ad.seek_dim]
-		return self.bonus - mine - theirs / 2
+        self.expected_mine = [
+            sum(
+                p * self._gap(i, self.ideal[i], v)
+                for v, p in enumerate(row)
+            )
+            for i, row in enumerate(self.trait_probs)
+        ]
 
-	def _gamma(self, rounds_left: int) -> float:
-		chances = min(rounds_left, self.singles - 1)
-		return max(0.0, min(1.0, chances / max(1, self.people - 1)))
+        self.expected_theirs = [
+            sum(
+                p * self._gap(i, v, self.profile[i])
+                for v, p in enumerate(row)
+            )
+            for i, row in enumerate(self.preference_probs)
+        ]
 
-	def _threshold(self, rounds_left: int) -> float:
-		"""A quantile of all scores we know of (sampled and real) that falls as
-		rounds and singles run out. Never below zero."""
-		pool = sorted(self.sample_scores + list(self.estimates.values()))
-		if not pool:
-			return 0.0
-		q = self._gamma(rounds_left) * TOP_QUANTILE
-		return max(0.0, pool[min(len(pool) - 1, int(q * len(pool)))])
+        self.sample_scores = sorted(
+            self._score(
+                tuple(
+                    self.rng.choices(VALUES, weights=row)[0]
+                    for row in self.trait_probs
+                ),
+                tuple(
+                    self.rng.choices(VALUES, weights=row)[0]
+                    for row in self.preference_probs
+                ),
+            )
+            for _ in range(self.config.sample_size)
+        )
 
-	# ----------------------------------------------------------- liar detection
+    def _ad_score(self, ad: Advertisement) -> float:
+        mine = (
+            sum(self.expected_mine)
+            - self.expected_mine[ad.own_dim]
+            + self._gap(
+                ad.own_dim,
+                self.ideal[ad.own_dim],
+                ad.own_value,
+            )
+        )
 
-	def _detect_lie(self, partner: int, observed: Profile, stated: Profile) -> bool:
-		past_proj = self.projections.get(partner, [])
-		past_ideal = self.stated_ideals.get(partner, [])
-		our_past = self.my_described.get(partner, [])[:-1]  # exclude today's
-		if any(tuple(p) != tuple(observed) for p in past_proj):
-			return True
-		if any(tuple(i) != tuple(stated) for i in past_ideal):
-			return True
-		if _similar(stated, self.profile):  # mirrors what we projected today
-			return True
-		return any(_similar(observed, ours) for ours in our_past)
+        theirs = (
+            sum(self.expected_theirs)
+            - self.expected_theirs[ad.seek_dim]
+            + self._gap(
+                ad.seek_dim,
+                ad.seek_value,
+                self.profile[ad.seek_dim],
+            )
+        )
 
-	# ---------------------------------------------------------------- the round
+        return self.bonus - mine - 0.5 * theirs
 
-	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
-		self.singles = turn.singles
-		if turn.round > self.observe_round_cap:
-			self.observing = False
-		for c in candidates:
-			if c.index not in self.ads_seen:
-				self.ads_seen.add(c.index)
-				self._observe_value(c.ad.own_dim, c.ad.own_value)
-		self._refresh_model()
+    def _penalty(self, partner: int) -> float:
+        return (
+            self.dims
+            * self.config.penalty_per_dimension
+            * self.suspicion.get(partner, 0.0)
+        )
 
-		pool = [c for c in candidates if c.index not in self.liars]
-		fresh = sorted(
-			(c for c in pool if c.index not in self.estimates),
-			key=lambda c: (-self._ad_score(c.ad), c.index),
-		)
-		known = sorted(
-			(c for c in pool if self.estimates.get(c.index, 0.0) > 0),
-			key=lambda c: (-self.estimates[c.index], c.index),
-		)
-		if self.observing:
-			# Grow the number of unique people seen, then revisit the good ones.
-			chosen = fresh + known
-		else:
-			bar = self._threshold(turn.rounds_left)
-			good = [c for c in known if self.estimates[c.index] >= bar]
-			rest = [c for c in known if self.estimates[c.index] < bar]
-			chosen = good + fresh + rest
-		return [c.index for c in chosen][: self.list_limit]
+    def _decision_score(
+        self,
+        partner: int,
+        ad: Advertisement,
+    ) -> float:
+        return (
+            self.estimates.get(partner, self._ad_score(ad))
+            - self._penalty(partner)
+        )
 
-	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
-		partner = date.partner
-		# Close the observe phase once enough unique people have been dated
-		# (estimates has one entry per unique partner, so repeats never count).
-		if self.observing and (
-			len(self.estimates) >= self.observe_target or date.round > self.observe_round_cap
-		):
-			self.observing = False
+    def _threshold(self, rounds_left: int) -> float:
+        horizon = max(1, min(self.rounds, self.people - 1))
 
-		lied = self._detect_lie(partner, observed, stated_ideal)
-		self.projections.setdefault(partner, []).append(tuple(observed))
-		self.stated_ideals.setdefault(partner, []).append(tuple(stated_ideal))
-		if partner not in self.projections_seen:
-			self.projections_seen.add(partner)
-			for dim, value in enumerate(observed):
-				self._observe_value(dim, value)
+        gamma = max(
+            0.0,
+            min(
+                1.0,
+                min(rounds_left - 1, self.singles - 1) / horizon,
+            ),
+        )
 
-		estimate = self._score(observed, stated_ideal)
-		self.estimates[partner] = estimate
-		past = self.estimate_history.setdefault(partner, [])
-		decreased = bool(past) and estimate < max(past)
-		past.append(estimate)
-		if lied:
-			self.liars.add(partner)
+        pool = sorted(
+            self.sample_scores
+            + [
+                value - self._penalty(partner)
+                for partner, value in self.estimates.items()
+            ]
+        )
 
-		if estimate < 0:
-			return Decision(incompatible=True)
-		# Long repeat streaks: a dropping score ends it, a steady one gets a proposal.
-		repeated = date.date_number > REPEAT_PROPOSE_AFTER
-		if repeated and decreased:
-			return Decision(incompatible=True)
-		if partner in self.liars:
-			return Decision()
+        if not pool:
+            return 0.0
 
-		best = estimate >= self.best_estimate
-		self.best_estimate = max(self.best_estimate, estimate)
-		can_propose = date.date_number >= 2
+        index = min(
+            len(pool) - 1,
+            int(self.config.top_quantile * gamma * len(pool)),
+        )
 
-		if repeated and estimate > 0:
-			return Decision(again=True, propose=True)
-		# They already proposed to us: accept in either phase unless their score dropped.
-		if partner in self.proposed_to_me and not decreased:
-			return Decision(again=True, propose=can_propose)
+        return max(0.0, pool[index])
 
-		if self.observing:
-			return Decision(again=best and estimate > 0)
+    def _update_suspicion(
+        self,
+        date: DateContext,
+        observed: Profile,
+        stated: Profile,
+    ) -> None:
+        c = self.config
+        partner = date.partner
 
-		if estimate > 0 and estimate >= self._threshold(date.rounds_left):
-			return Decision(again=True, propose=can_propose)
-		return Decision(again=best and estimate > 0)
+        previous = self.traits.reports.get(partner)
+        previous_ideal = self.preferences.reports.get(partner)
 
-	def on_outcome(self, outcome: DateOutcome) -> None:
-		if outcome.partner_proposed:
-			self.proposed_to_me.add(outcome.partner)
-		if self.observing and len(self.estimates) >= self.observe_target:
-			self.observing = False
+        changed = float(
+            previous is not None and previous != tuple(observed)
+        )
+        changed += float(
+            previous_ideal is not None
+            and previous_ideal != tuple(stated)
+        )
+
+        ad = date.partner_ad
+        contradiction = float(
+            observed[ad.own_dim] != ad.own_value
+        )
+        contradiction += float(
+            stated[ad.seek_dim] != ad.seek_value
+        )
+
+        copied = float(
+            similar(
+                stated,
+                self.personas.get(partner, self.profile),
+                c.similarity_cutoff,
+            )
+        )
+
+        if previous is not None and partner in self.my_described:
+            copied += float(
+                similar(
+                    observed,
+                    self.my_described[partner],
+                    c.similarity_cutoff,
+                )
+            )
+
+        self.evidence[partner] = {
+            "changed": changed,
+            "ad": contradiction,
+            "copy": copied,
+        }
+
+        new_evidence = (
+            changed * c.change_weight
+            + contradiction * c.ad_weight
+            + copied * c.copy_weight
+        )
+
+        # Repeated identical evidence sets a floor rather than
+        # accumulating indefinitely. Consistency allows recovery.
+        self.suspicion[partner] = min(
+            c.suspicion_cap,
+            max(
+                self.suspicion.get(partner, 0.0) * c.suspicion_decay,
+                new_evidence,
+            ),
+        )
+
+    def choose_dates(
+        self,
+        candidates: tuple[Candidate, ...],
+        turn: RoundContext,
+    ) -> list[int]:
+        self.singles = turn.singles
+        self._update_phase(turn.round)
+
+        ranked = sorted(
+            candidates,
+            key=lambda c: (
+                -self._decision_score(c.index, c.ad),
+                c.index,
+            ),
+        )
+
+        count = max(
+            1,
+            math.ceil(
+                self.config.interest_multiple * math.sqrt(self.people)
+            ),
+        )
+
+        if self.list_limit is not None:
+            count = min(count, self.list_limit)
+
+        return [c.index for c in ranked[:count]]
+
+    def _demand_cost(
+        self,
+        dim: int,
+        value: int,
+        ad: Advertisement | None = None,
+    ) -> float:
+        if ad is not None and dim == ad.seek_dim:
+            return float(self._gap(dim, ad.seek_value, value))
+
+        return sum(
+            p * self._gap(dim, want, value)
+            for want, p in enumerate(self.preference_probs[dim])
+        )
+
+    def project(self, date: DateContext) -> Profile:
+        # Keep the same persona for every date with this partner.
+        if date.partner in self.personas:
+            return self.personas[date.partner]
+
+        persona = list(self.profile)
+        c = self.config
+
+        if (
+            c.deception_enabled
+            and date.date_number == 1
+            and date.rounds_left >= 2
+            and date.round >= math.ceil(c.late_fraction * self.rounds)
+            and min(self.preferences.effective_samples) >= c.min_samples
+            and self._decision_score(
+                date.partner, date.partner_ad
+            ) > 0
+        ):
+            changes = []
+
+            for dim, actual in enumerate(self.profile):
+                # Never contradict our advertised own characteristic.
+                if dim == self.ad.own_dim:
+                    continue
+
+                options = range(
+                    max(0, actual - c.max_shift),
+                    min(10, actual + c.max_shift) + 1,
+                )
+
+                best = min(
+                    options,
+                    key=lambda v: (
+                        self._demand_cost(dim, v),
+                        abs(v - actual),
+                        v,
+                    ),
+                )
+
+                population_gain = (
+                    self._demand_cost(dim, actual)
+                    - self._demand_cost(dim, best)
+                )
+
+                partner_gain = (
+                    self._demand_cost(dim, actual, date.partner_ad)
+                    - self._demand_cost(dim, best, date.partner_ad)
+                )
+
+                if population_gain >= c.demand_gap and partner_gain > 0:
+                    changes.append((partner_gain, dim, best))
+
+            changes.sort(key=lambda item: (-item[0], item[1]))
+            selected = changes[: c.max_lie_dimensions]
+
+            # Perceived-cost improvement, not marriage probability.
+            if (
+                selected
+                and sum(gain for gain, _, _ in selected)
+                >= c.min_perceived_gain
+            ):
+                for _, dim, value in selected:
+                    persona[dim] = value
+
+                self.deceptions_started += 1
+
+        self.personas[date.partner] = tuple(persona)
+        return self.personas[date.partner]
+
+    def describe_ideal(
+        self,
+        date: DateContext,
+        observed: Profile,
+    ) -> Profile:
+        return self.ideal
+
+    def decide(
+        self,
+        date: DateContext,
+        observed: Profile,
+        stated_ideal: Profile,
+    ) -> Decision:
+        self._update_suspicion(date, observed, stated_ideal)
+
+        self.traits.update(date.partner, observed)
+        self.preferences.update(date.partner, stated_ideal)
+        self.my_described[date.partner] = self.ideal
+        self.estimates[date.partner] = self._score(
+            observed, stated_ideal
+        )
+
+        # Refresh after every date, including reserved repeat dates.
+        self._refresh_model()
+        self._update_phase(date.round)
+
+        score = self._decision_score(
+            date.partner, date.partner_ad
+        )
+
+        if score <= 0 or self.observing:
+            return Decision()
+
+        if score >= self._threshold(date.rounds_left):
+            return Decision(
+                again=True,
+                propose=date.date_number >= 2,
+            )
+
+        return Decision()
+
+    def on_outcome(self, outcome: DateOutcome) -> None:
+        if outcome.partner_proposed:
+            self.proposed_to_me.add(outcome.partner)
