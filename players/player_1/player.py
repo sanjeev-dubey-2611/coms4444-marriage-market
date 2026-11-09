@@ -9,10 +9,10 @@ from models.player import (
 	RoundContext,
 )
 from models.player import Player as BasePlayer
-from models.profile import Profile, decrement
+from models.profile import VALUES, Profile, decrement
 
-# Never marry below this share of the bonus, except in the endgame.
-FLOOR_SHARE = 0.1
+# No fixed positive floor; the declining acceptance bar still applies.
+FLOOR_SHARE = 0.0
 # The bar starts at this percentile of the first-date scores we have seen ...
 BAR_PERCENTILE = 0.6
 # ... or at this share of the bonus until we have MIN_SAMPLES of them.
@@ -168,15 +168,16 @@ class Player1(BasePlayer):
 		ad = self.ads[partner]
 		flattered = all(tuple(ideal) == tuple(self.profile) for _, ideal in reports)
 
-		values = []
+		mine = 0.0
 		for dim in range(self.dims):
 			options = {obs[dim] for obs, _ in reports}
 			if ad.own_dim == dim:
 				options.add(ad.own_value)  # ad and behaviour disagree: take the worse
+			cost = max(self._gap(dim, self.ideal[dim], value) for value in options)
 			if flattered and dim == self.my_ad.seek_dim:
-				options.add(self._typical(dim))  # they may be showing us what we asked for
-			values.append(max(options, key=lambda v, dim=dim: self._gap(dim, self.ideal[dim], v)))
-		mine = decrement(self.ideal, tuple(values), self.monotonic)
+				# Average penalties, not traits, so population variance contributes.
+				cost = max(cost, self._typical_cost(dim))
+			mine += cost
 
 		honest_ideals = [ideal for _, ideal in reports if tuple(ideal) != tuple(self.profile)]
 		if honest_ideals:
@@ -204,14 +205,25 @@ class Player1(BasePlayer):
 			self.dim_values[dim].append(value)
 		self.their_costs.append(decrement(stated_ideal, self.profile, self.monotonic))
 
-	def _typical(self, dim: int) -> int:
-		seen = self.dim_values[dim]
-		return round(sum(seen) / len(seen)) if seen else 5
+	def _typical_cost(self, dim: int) -> float:
+		"""Expected mismatch against observed traits, with a uniform fallback.
+
+		The hidden P is unavailable. With no usable observations, every legal
+		value receives equal weight; otherwise use the empirical distribution.
+		"""
+		values = self.dim_values[dim] or VALUES
+		return sum(self._gap(dim, self.ideal[dim], value) for value in values) / len(values)
 
 	def _typical_their_cost(self) -> float:
 		if self.their_costs:
 			return sum(self.their_costs) / len(self.their_costs)
-		return 12.0 * self.dims
+		# Unknown desired traits go in the "want" argument. This direction
+		# matters for monotonic traits, where only unmet desires incur a cost.
+		cost = 0.0
+		for dim, have in enumerate(self.profile):
+			values = self.dim_values[dim] or VALUES
+			cost += sum(self._gap(dim, want, have) for want in values) / len(values)
+		return cost
 
 	# ------------------------------------------------------------ thresholds
 
