@@ -1,7 +1,7 @@
 """Group 3 marriage-market player.
 
-Toggle class attributes to ablate strategies (see evaluate.py). ``Player3`` runs
-the full stack; ``Player3V1`` matches the original deliverable.
+Self-contained coordination and controlled-deception strategy. ``Player3V1``
+preserves the original deliverable for comparison.
 """
 
 from __future__ import annotations
@@ -21,6 +21,310 @@ from models.player import (
 )
 from models.player import Player as BasePlayer
 from models.profile import MAX_VALUE, Profile, decrement
+
+
+class Coordination:
+	ADAPTIVE_REPEAT = False
+	SCARCITY_RESERVATION = False
+	FOCUS_OFFERS = False
+	REPEAT_QUANTILE = 0.75
+	REPEAT_MIN_PARTNERS = 3
+	CANDIDATE_CAP = None
+	STOP_AFTER_OFFERS = None
+	BILATERAL_REPEAT = False
+
+	def _reservation(self, rounds_left, singles):
+		bar = super()._reservation(rounds_left, singles)
+		if self.SCARCITY_RESERVATION:
+			bar *= min(1.0, singles / max(2, self.people))
+		return bar
+
+	def _coordination_safe(self, partner):
+		probabilities = getattr(self, '_positive', None)
+		return probabilities is None or probabilities.get(partner, 0.0) >= 0.9
+
+	def decide(self, date, observed, stated_ideal):
+		decision = super().decide(date, observed, stated_ideal)
+		if (
+			self.ADAPTIVE_REPEAT
+			and not decision.again
+			and not decision.incompatible
+			and date.rounds_left > 1
+			and len(self._est) >= self.REPEAT_MIN_PARTNERS
+			and self._coordination_safe(date.partner)
+		):
+			personal_floor = min(
+				0.5 * self.bonus, self._percentile(list(self._est.values()), self.REPEAT_QUANTILE)
+			)
+			bar = max(0.0, personal_floor, self._reservation(date.rounds_left, self._last_singles))
+			if self._est[date.partner] > bar and (
+				self._partner(date.partner).proposals_to < self.MAX_ONE_SIDED_PROPOSALS
+				or date.partner in self._proposed_to_me
+			):
+				decision = Decision(again=True, propose=decision.propose)
+		if (
+			self.BILATERAL_REPEAT
+			and not decision.again
+			and date.rounds_left > 1
+			and self._partner(date.partner).trust >= 0.75
+			and self._coordination_safe(date.partner)
+		):
+			theirs = (
+				self.bonus
+				- decrement(stated_ideal, self.profile, self.monotonic)
+				- decrement(self.ideal, observed, self.monotonic) / 2
+			)
+			if min(self._est[date.partner], theirs) > max(
+				0.35 * self.bonus, self._reservation(date.rounds_left, self._last_singles)
+			):
+				decision = Decision(again=True, propose=decision.propose)
+		if (
+			self.STOP_AFTER_OFFERS is not None
+			and self._partner(date.partner).proposals_to >= self.STOP_AFTER_OFFERS
+			and date.partner not in self._proposed_to_me
+		):
+			# Still offer on this date: their proposal can arrive simultaneously.
+			# Stop reserving every following round for an unresponsive partner.
+			decision = Decision(again=False, propose=decision.propose)
+		return decision
+
+	def choose_dates(self, candidates, turn):
+		chosen = super().choose_dates(candidates, turn)
+		if self.FOCUS_OFFERS:
+			offers = [
+				c
+				for c in candidates
+				if c.index in self._proposed_to_me
+				and self._est.get(c.index, 0) > 0
+				and self._coordination_safe(c.index)
+			]
+			if offers:
+				# Matching consumes a set, so sorting an otherwise unchanged list cannot prioritize an offer.
+				best = max(offers, key=lambda c: (self._est[c.index], -c.index))
+				return [best.index]
+		if self.STOP_AFTER_OFFERS is not None:
+			chosen = [
+				i
+				for i in chosen
+				if i in self._proposed_to_me
+				or i not in self._partners
+				or self._partners[i].proposals_to < self.STOP_AFTER_OFFERS
+			]
+		return chosen[: self.CANDIDATE_CAP]
+
+
+DECEPTION_DEFAULTS = dict(
+	ad_inflate=0,
+	ad_ceiling=10,
+	ad_min_true=0,
+	ad_min_bonus_per_dim=0,
+	ad_own='original',
+	ad_seek_shift=0,
+	ad_seek='original',
+	consistent_ad=True,
+	project_mode='honest',
+	project_step=2,
+	stable_profile=True,
+	preference_blend=0.0,
+	preference_step=10,
+	stable_ideal=True,
+	avoid_mirror=True,
+	adaptive='none',
+	compatibility_floor=0.1,
+	late_fraction=0.6,
+	guard='none',
+	guard_margin=0.0,
+	guard_shift=2,
+	guard_min_ad=0,
+	guard_radius=1,
+	score_debias=0,
+)
+
+
+class Deception:
+	"""Separate public messages from our real private utility calculation."""
+
+	SETTINGS = DECEPTION_DEFAULTS
+
+	def __init__(self, snapshot, ctx):
+		super().__init__(snapshot, ctx)
+		self._sent_profiles = {}
+		self._sent_ideals = {}
+
+	def advertise(self):
+		ad = super().advertise()
+		s = self.SETTINGS
+		own, value = ad.own_dim, ad.own_value
+		if s['ad_own'] == 'nonmono' and self.monotonic < self.dims:
+			own = min(range(self.monotonic, self.dims), key=lambda i: abs(self.profile[i] - 5))
+			value = self.profile[own]
+		elif s['ad_own'] == 'balanced':
+			own = min(
+				range(self.dims),
+				key=lambda i: sum(self._gap(i, w, self.profile[i]) for w in range(11)),
+			)
+			value = self.profile[own]
+		elif s['ad_own'] == 'weak_mono' and self.monotonic:
+			own = min(range(self.monotonic), key=lambda i: self.profile[i])
+			value = self.profile[own]
+		if (
+			own < self.monotonic
+			and value >= s['ad_min_true']
+			and self.bonus / self.dims >= s['ad_min_bonus_per_dim']
+		):
+			value = max(value, min(s['ad_ceiling'], value + s['ad_inflate']))
+		seek, want = ad.seek_dim, ad.seek_value
+		if s['ad_seek'] == 'low_mono' and self.monotonic:
+			seek = min(range(self.monotonic), key=lambda i: self.ideal[i])
+			want = self.ideal[seek]
+		shift = s['ad_seek_shift']
+		if seek < self.monotonic:
+			want = max(0, want - shift)
+		else:
+			want += max(-shift, min(shift, 5 - want))
+		self._ad = Advertisement(own, value, seek, want)
+		return self._ad
+
+	def _lie_allowed(self, date, observed=None):
+		s = self.SETTINGS
+		mode = s['adaptive']
+		if mode == 'none':
+			return True
+		state = self._partners.get(date.partner)
+		if mode == 'late' and date.round < s['late_fraction'] * self.rounds:
+			return False
+		if mode == 'reluctant' and (date.date_number < 2 or date.partner in self._proposed_to_me):
+			return False
+		if state and state.trust < 0.75:
+			return False
+		if observed is None:
+			if state and state.observations:
+				observed = state.observations[-1]
+			else:
+				values = list(self._dim_means())
+				values[date.partner_ad.own_dim] = date.partner_ad.own_value
+				observed = tuple(values)
+		ideal = state.stated_ideals[0] if state and state.stated_ideals else self._dim_means()
+		if self._estimate(observed, ideal) <= s['compatibility_floor'] * self.bonus:
+			return False
+		if mode == 'marginal':
+			theirs = (
+				self.bonus
+				- decrement(ideal, self.profile, self.monotonic)
+				- decrement(self.ideal, observed, self.monotonic) / 2
+			)
+			return theirs < 0.6 * self.bonus
+		return True
+
+	def project(self, date):
+		s = self.SETTINGS
+		if s['stable_profile'] and date.partner in self._sent_profiles:
+			out = self._sent_profiles[date.partner]
+		else:
+			values = list(self.profile)
+			mode, step = s['project_mode'], s['project_step']
+			if self._lie_allowed(date):
+				if mode in ('mono', 'first_mono') and (
+					mode != 'first_mono' or date.date_number == 1
+				):
+					for i in range(self.monotonic):
+						values[i] = min(10, values[i] + step)
+				elif mode == 'partner':
+					state = self._partners.get(date.partner)
+					if state and state.stated_ideals:
+						wanted = state.stated_ideals[-1]
+					else:
+						wanted = list(self.profile)
+						wanted[date.partner_ad.seek_dim] = date.partner_ad.seek_value
+					for i, want in enumerate(wanted):
+						if i < self.monotonic:
+							want = max(want, values[i])
+						values[i] += max(-step, min(step, want - values[i]))
+			if s['consistent_ad'] and self._ad:
+				values[self._ad.own_dim] = self._ad.own_value
+			out = tuple(values)
+			self._sent_profiles[date.partner] = out
+		self._last_projection = out
+		return out
+
+	def describe_ideal(self, date, observed):
+		s = self.SETTINGS
+		if s['stable_ideal'] and date.partner in self._sent_ideals:
+			return self._sent_ideals[date.partner]
+		values = list(self.ideal)
+		blend = s['preference_blend']
+		if blend and self._lie_allowed(date, observed):
+			for i, have in enumerate(observed):
+				target = min(have, values[i]) if i < self.monotonic else have
+				shift = round((1 - blend) * values[i] + blend * target) - values[i]
+				values[i] += max(-s['preference_step'], min(s['preference_step'], shift))
+		if s['consistent_ad'] and self._ad:
+			values[self._ad.seek_dim] = self._ad.seek_value
+		# Only alter a deceptive statement here; a no-op policy must be exactly honest.
+		if s['avoid_mirror'] and tuple(values) != self.ideal and tuple(values) == observed:
+			editable = [
+				i
+				for i in range(self.dims)
+				if not (s['consistent_ad'] and self._ad and i == self._ad.seek_dim)
+			]
+			if editable:
+				i = min(editable, key=lambda j: abs(self.ideal[j] - values[j]))
+				values[i] += -1 if values[i] > 0 else 1
+		out = tuple(values)
+		self._sent_ideals[date.partner] = out
+		return out
+
+	def _adjust_profiles(self, partner, partner_ad, observed, stated_ideal, our_projection):
+		adj_obs, adj_ideal, trust = super()._adjust_profiles(
+			partner, partner_ad, observed, stated_ideal, our_projection
+		)
+		shift = self.SETTINGS['score_debias']
+		if (
+			shift
+			and partner_ad.own_dim < self.monotonic
+			and partner_ad.own_value >= self.SETTINGS['guard_min_ad']
+		):
+			values = list(adj_obs)
+			values[partner_ad.own_dim] = max(0, values[partner_ad.own_dim] - shift)
+			adj_obs = tuple(values)
+		return adj_obs, adj_ideal, trust
+
+	def decide(self, date, observed, stated_ideal):
+		previous_count = self._partner(date.partner).proposals_to
+		decision = super().decide(date, observed, stated_ideal)
+		s = self.SETTINGS
+		if s['guard'] != 'none':
+			state = self._partner(date.partner)
+			ours = self._estimate(observed, stated_ideal)
+			if s['guard'] == 'first':
+				ours = min(ours, self._estimate(state.observations[0], state.stated_ideals[0]))
+			elif s['guard'] == 'debiased':
+				ad = date.partner_ad
+				if ad.own_dim < self.monotonic and ad.own_value >= s['guard_min_ad']:
+					values = list(observed)
+					values[ad.own_dim] = max(0, values[ad.own_dim] - s['guard_shift'])
+					ours = min(ours, self._estimate(tuple(values), stated_ideal))
+			elif s['guard'] == 'bounded':
+				r = s['guard_radius']
+				mine = sum(
+					max(
+						self._gap(i, self.ideal[i], max(0, v - r)),
+						self._gap(i, self.ideal[i], min(10, v + r)),
+					)
+					for i, v in enumerate(observed)
+				)
+				theirs = sum(
+					max(
+						self._gap(i, max(0, v - r), self.profile[i]),
+						self._gap(i, min(10, v + r), self.profile[i]),
+					)
+					for i, v in enumerate(stated_ideal)
+				)
+				ours = min(ours, self.bonus - mine - theirs / 2)
+			if ours <= s['guard_margin'] * self.bonus:
+				state.proposals_to = previous_count
+				return Decision()
+		return decision
 
 
 @dataclass
@@ -465,8 +769,18 @@ class Player3V1(_Player3Core):
 		return Decision(again=pursue or propose, propose=propose)
 
 
-class Player3(_Player3Core):
-	"""Submitted player — flags tuned via ``tools/tune_defaults.py`` (18 seeds, 5 arenas)."""
+class Player3(Deception, Coordination, _Player3Core):
+	"""Controlled deception validated against frozen coordination on 100 fresh seeds."""
+
+	SETTINGS = {
+		**DECEPTION_DEFAULTS,
+		'ad_inflate': 2,
+		'preference_blend': 0.65,
+		'adaptive': 'late',
+		'late_fraction': 0.35,
+		'stable_ideal': False,
+		'guard': 'raw',
+	}
 
 	USE_TRUST = True
 	USE_MARKET_BAR = True
@@ -478,6 +792,10 @@ class Player3(_Player3Core):
 	LIE_MODE = 'honest'
 	AD_SEEK_MODE = 'costly'
 	OWN_AD_INFLATE = 0
+	MAX_ONE_SIDED_PROPOSALS = float('inf')
+	STOP_AFTER_OFFERS = 4
+	CANDIDATE_CAP = 8
+	BILATERAL_REPEAT = True
 
 
 class Player3AllOn(_Player3Core):
