@@ -1,9 +1,10 @@
 """Group 9: truthful public signaling, coordinated matching, and adaptive search."""
 
 import os
+from collections import deque
 from dataclasses import dataclass, field
 from functools import lru_cache
-from math import ceil, sqrt
+from math import ceil, exp, sqrt
 from random import Random
 
 from models.player import (
@@ -274,6 +275,152 @@ for _item in os.environ.get('P9_PARAMS', '').split(','):
 		PARAMS[_key.strip()] = float(_value)
 
 
+# Ridge-logistic gate fitted to public advertisements. This score is not proof
+# of player identity or cooperation. The cutoff rejected all 816 noncooperative
+# calibration examples; runtime candidate loss cancels exploration immediately.
+_COOPERATION_WEIGHTS = (
+	6.055266389963511,
+	-5.2803245020372716,
+	-4.60549213339715,
+	-6.283389838550684,
+	7.172524225026243,
+	8.108675817897518,
+	-4.51378117645401,
+	-6.329398405952754,
+	1.0490739039129067,
+	-6.312140165294354,
+	5.067821310282944,
+	6.524643357057741,
+)
+_COOPERATION_CUTOFF = 0.9711576022742818
+
+
+def _cooperation_score(ads: list[Advertisement]) -> float:
+	"""Score an initial public-ad market without accessing opponent identities."""
+	n = len(ads)
+	features = (
+		1.0,
+		sum(ad.seek_dim < 2 for ad in ads) / n,
+		sum(ad.own_value for ad in ads) / (10 * n),
+		sum(abs(ad.seek_value - 5) for ad in ads) / (5 * n),
+		sum(abs(ad.own_value - 5) for ad in ads) / (5 * n),
+		sum(ad.own_value == 10 for ad in ads) / n,
+		sum(ad.seek_value in (0, 10) for ad in ads) / n,
+		*(sum(ad.seek_dim == dim for ad in ads) / n for dim in range(5)),
+	)
+	logit = sum(w * x for w, x in zip(_COOPERATION_WEIGHTS, features, strict=True))
+	return 1 / (1 + exp(-max(-35.0, min(35.0, logit))))
+
+
+def _match_large_market(count: int, weights: dict[tuple[int, int], float]) -> list[int]:
+	"""Maximum positive-pair cardinality, followed by bounded happiness swaps."""
+	neighbours = [[] for _ in range(count)]
+	for a, b in weights:
+		neighbours[a].append(b)
+		neighbours[b].append(a)
+	for a in range(count):
+		neighbours[a].sort(key=lambda b: (-weights[min(a, b), max(a, b)], b))
+	mate = [-1] * count
+	for a, b in sorted(weights, key=lambda edge: (-weights[edge], edge)):
+		if mate[a] < 0 and mate[b] < 0:
+			mate[a] = b
+			mate[b] = a
+
+	def augment(root):
+		parent = [-1] * count
+		base = list(range(count))
+		used = [False] * count
+
+		def lca(a, b):
+			path = [False] * count
+			while True:
+				a = base[a]
+				path[a] = True
+				if mate[a] < 0:
+					break
+				a = parent[mate[a]]
+			while not path[base[b]]:
+				b = parent[mate[base[b]]]
+			return base[b]
+
+		def mark(a, b, common, blossom):
+			while base[a] != common:
+				blossom[base[a]] = blossom[base[mate[a]]] = True
+				parent[a] = b
+				b = mate[a]
+				a = parent[mate[a]]
+
+		queue = deque([root])
+		used[root] = True
+		while queue:
+			a = queue.popleft()
+			for b in neighbours[a]:
+				if base[a] == base[b] or mate[a] == b:
+					continue
+				if b == root or (mate[b] >= 0 and parent[mate[b]] >= 0):
+					common = lca(a, b)
+					blossom = [False] * count
+					mark(a, b, common, blossom)
+					mark(b, a, common, blossom)
+					for i in range(count):
+						if blossom[base[i]]:
+							base[i] = common
+							if not used[i]:
+								used[i] = True
+								queue.append(i)
+				elif parent[b] < 0:
+					parent[b] = a
+					if mate[b] < 0:
+						while b >= 0:
+							a = parent[b]
+							previous = mate[a] if a >= 0 else -1
+							mate[b] = a
+							if a >= 0:
+								mate[a] = b
+							b = previous
+						return True
+					used[mate[b]] = True
+					queue.append(mate[b])
+		return False
+
+	for a in range(count):
+		if mate[a] < 0:
+			augment(a)
+
+	# Keep cardinality fixed. These local swaps improve, but do not globally
+	# maximize, happiness. A fixed iteration bound limits callback time.
+	def weight(a, b):
+		return weights.get((min(a, b), max(a, b)))
+
+	for _ in range(count):
+		pairs = [(a, b) for a, b in enumerate(mate) if a < b]
+		best = 0
+		change = None
+		for i, (a, b) in enumerate(pairs):
+			old = weight(a, b)
+			for c in range(count):
+				if mate[c] < 0:
+					for u, v in [(a, b), (b, a)]:
+						w = weight(u, c)
+						if w is not None and w - old > best:
+							best = w - old
+							change = [(u, c), (v, -1)]
+			for c, d in pairs[i + 1 :]:
+				old_both = old + weight(c, d)
+				for u, v in [(c, d), (d, c)]:
+					x, y = weight(a, u), weight(b, v)
+					if x is not None and y is not None and x + y - old_both > best:
+						best = x + y - old_both
+						change = [(a, u), (b, v)]
+		if change is None:
+			break
+		for a, b in change:
+			mate[a] = b
+			if b >= 0:
+				mate[b] = a
+	return mate
+
+
 class Player9(BasePlayer):
 	"""Choose promising dates, learn willingness, and adapt to our own prospects.
 
@@ -282,6 +429,7 @@ class Player9(BasePlayer):
 	market disappears and is scaled to 70--144% by private compatibility scarcity.
 	When initial public ads all follow our truthful convention, use a common
 	exploration deadline and cardinality-first, happiness-second matching.
+	The supported N50 mode uses a fitted public-ad gate and polynomial matching.
 	Otherwise use independent reciprocal search immediately.
 	We display our true profile and ideal; partners who use a decodable
 	first-date swap or who mirror our messages back are still recognised.
@@ -313,13 +461,22 @@ class Player9(BasePlayer):
 			and self.rounds >= 2 * self.people + 6
 			and self.bonus > 0
 		)
+		# The statistical gate was evaluated only in this parameter domain.
+		self.statistical_coordination = (
+			self.people == 50
+			and self.dims == 5
+			and self.monotonic == 2
+			and self.bonus == 150
+			and self.rounds == 250
+		)
+		self.coordination_eligible |= self.statistical_coordination
 		self.coordinating: bool | None = None
 		self.exploring = False
 		self.target: int | None = None
 		self.target_chosen = False
 
 	def advertise(self) -> Advertisement:
-		"""Truthfully signal the matching convention and disclose a costly preference."""
+		"""Disclose a strength and costly preference, with the small-market convention."""
 		showable = range(self.monotonic) if self.monotonic else range(self.dims)
 		own = max(
 			showable,
@@ -329,7 +486,7 @@ class Player9(BasePlayer):
 			range(self.dims),
 			key=lambda i: sum(cost[i] for cost in self.beliefs.prior_own_costs),
 		)
-		if self.coordination_eligible:
+		if self.coordination_eligible and not self.statistical_coordination:
 			# A public, truthful convention; matching is still based on dates.
 			own = 1
 		return Advertisement(own, self.profile[own], seek, self.ideal[seek])
@@ -681,13 +838,30 @@ class Player9(BasePlayer):
 		return Decision(again=again, propose=propose)
 
 	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
-		"""Use the common matching policy only after unanimous public signals."""
+		"""Coordinate under a tested public gate, otherwise search independently."""
 		if self.coordinating is None:
-			self.coordinating = (
-				self.coordination_eligible
-				and bool(candidates)
-				and all(candidate.ad.own_dim == 1 for candidate in candidates)
-			)
+			if self.statistical_coordination:
+				# Include our own unchanged advertisement so peers see identical inputs.
+				ads = [self.advertise(), *(candidate.ad for candidate in candidates)]
+				self.coordinating = (
+					len(ads) == self.people
+					and all(ad.own_dim < self.monotonic for ad in ads)
+					and _cooperation_score(ads) >= _COOPERATION_CUTOFF
+				)
+			else:
+				self.coordinating = (
+					self.coordination_eligible
+					and bool(candidates)
+					and all(candidate.ad.own_dim == 1 for candidate in candidates)
+				)
+		if (
+			self.statistical_coordination
+			and turn.round < min(2 * self.people, self.rounds // 2)
+			and len(candidates) < self.people - 1
+		):
+			# Reserved repeats, blocks or marriages contradict shared exploration.
+			# Candidate loss need not establish which event occurred.
+			self.coordinating = False
 		if not self.coordinating:
 			return self._choose_independently(candidates, turn)
 
@@ -717,7 +891,10 @@ class Player9(BasePlayer):
 		return selected
 
 	def _matching_target(self) -> int | None:
-		"""Maximize positive pairs, then reported happiness, using personal evidence.
+		"""Construct positive matches from personal dating evidence.
+
+		Small markets optimize cardinality and happiness exactly. The larger-market
+		solver maximizes cardinality but only locally refines happiness.
 
 		The fixed exploration deadline helps peers build comparable graphs. Each
 		person solves their own graph; no state is shared between instances.
@@ -747,6 +924,11 @@ class Player9(BasePlayer):
 				happy_b = self.bonus - cost_b - cost_a / 2
 				if happy_a > 0 and happy_b > 0:
 					weights[first, second] = reward + happy_a + happy_b
+
+		if self.statistical_coordination:
+			mate = _match_large_market(count, weights)
+			partner = mate[indices.index(self.index)]
+			return indices[partner] if partner >= 0 else None
 
 		choices: dict[int, int | None] = {}
 
