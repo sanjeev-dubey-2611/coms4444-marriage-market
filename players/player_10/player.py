@@ -115,7 +115,8 @@ class Player10(BasePlayer):
 		mean_estimate = self.calculate_estimate(remaining_mean, remaining_mean)
 
 		# @TODO: we can potentially do some threshold decay based on number of turns left and/or single people left
-		propose_threshold = mean_estimate
+		# propose_threshold = mean_estimate
+		propose_threshold = 0
 		if date.partner in self.proposed_to_me:
 			propose_threshold = mean_estimate / 2
 		propose = bool(date.date_number >= 2 and estimate > propose_threshold)
