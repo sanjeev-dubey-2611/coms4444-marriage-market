@@ -236,7 +236,9 @@ class Player8(BasePlayer):
 		if date.partner in self.proposed_to_me:
 			bar = 0.05 * self.bonus
 		propose = date.date_number >= 2 and estimate > bar
-		again = propose or estimate > 0.5 * bar
+		# Only ask for another date if they already clear the proposal bar;
+		# repeat dates spent on lukewarm matches cost rounds we could search with.
+		again = propose or estimate > bar
 		return Decision(again=again, propose=propose)
 
 	# ------------------------------------------------------------------ odds
