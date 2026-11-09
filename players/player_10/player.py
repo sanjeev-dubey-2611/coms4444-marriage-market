@@ -1,5 +1,7 @@
 """Group 10's greedy strategy with an optimistic projected profile."""
 
+import numpy as np
+
 from models.player import (
 	Advertisement,
 	Candidate,
@@ -13,7 +15,6 @@ from models.player import (
 from models.player import Player as BasePlayer
 from models.profile import Profile, decrement
 
-import numpy as np
 
 class Player10(BasePlayer):
 	"""Greedy dating decisions, with maximum values projected on monotonic traits."""
@@ -37,7 +38,7 @@ class Player10(BasePlayer):
 		)
 
 	def is_collect_data(self, ctx: RoundContext | DateContext):
-		"""We collect data if we are less than half-way through and we haven't seen everyone. 
+		"""We collect data if we are less than half-way through and we haven't seen everyone.
 		So we stop collecting data if we are more than half-way through or we have seen everyone.
 		"""
 		return ctx.rounds_left > ctx.round and len(self.dated) < self.people
@@ -47,7 +48,7 @@ class Player10(BasePlayer):
 		if self.is_collect_data(turn):
 			# When collecting data, choose everyone we haven't chosen before
 			chosen = [c.index for c in candidates if c not in self.dated]
-			return chosen[:self.list_limit]
+			return chosen[: self.list_limit]
 		else:
 			chosen = [c.index for c in candidates if self.estimates.get(c.index, 0.0) > 0]
 			fresh = sorted(
@@ -89,7 +90,9 @@ class Player10(BasePlayer):
 		self.estimates[date.partner] = estimate
 
 		if self.is_collect_data(date):
-			if date.date_number == 1: # There is a chance we get paired again with them without our consent, so only add if first date
+			if (
+				date.date_number == 1
+			):  # There is a chance we get paired again with them without our consent, so only add if first date
 				self.dated.append(date.partner)
 				self.samples.extend([observed, stated_ideal])
 			# Don't do anything, but if it seems our estimate will be negative, then we can set them as incompatible
@@ -100,8 +103,8 @@ class Player10(BasePlayer):
 			self.samples.extend([observed, stated_ideal])
 		else:
 			i = self.dated.index(date.partner)
-			prev_observed = self.samples[i * 2]
-			prev_ideal = self.samples[i * 2 + 1]
+			_prev_observed = self.samples[i * 2]
+			_prev_ideal = self.samples[i * 2 + 1]
 			# @TODO: We can maybe do something if they've changed their profile
 
 		if estimate <= 0:
