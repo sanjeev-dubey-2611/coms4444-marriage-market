@@ -1,5 +1,14 @@
-"""Group 4's player, following players/player_4/strategy_1104.md."""
+"""Group 4's player, following players/player_4/strategy_1104.md.
 
+Changes since that strategy:
+- The threshold is a falling quantile of first-date scores we have seen,
+  not a fixed fraction of the bonus, so it adapts to B and the distribution.
+- Monotonic dimensions are projected truthfully; only regular extremes are masked.
+- The lie check ignores the ad's seek half, and a liar's penalty is inflated
+  rather than their score scaled down.
+"""
+
+from bisect import insort
 from dataclasses import dataclass, field
 
 from models.player import (
@@ -15,18 +24,23 @@ from models.player import (
 from models.player import Player as BasePlayer
 from models.profile import MAX_VALUE, Profile, decrement
 
-# Masking bounds used by project() and advertise().
-MONOTONIC_PROJECTION_FLOOR = 3
+# Masking bounds for regular dimensions, used by project() and advertise().
 REGULAR_PROJECTION_LOW = 2
 REGULAR_PROJECTION_HIGH = 8
 
-# Score threshold, as a fraction of the bonus, at the two ends of the run.
-EARLY_THRESHOLD_FRACTION = 0.8
-LATE_THRESHOLD_FRACTION = 0.0
-# Share of the run at each end where the threshold stays flat.
+# Threshold quantile of first-date scores at the two ends of the run.
+EARLY_THRESHOLD_QUANTILE = 0.9
+LATE_THRESHOLD_QUANTILE = 0.0
+# Share of the run at each end where the quantile stays flat.
 FLAT_THRESHOLD_SHARE = 0.1
+# Until we have this many first-date scores, fall back to a fraction of the bonus.
+MIN_SCORES_FOR_QUANTILE = 5
+FALLBACK_THRESHOLD_FRACTION = 0.8
+# Runs shorter than this scale the fallback down, since a short run may end
+# before we ever have enough scores for the quantile.
+FULL_FALLBACK_ROUNDS = 20
 
-UNTRUTHFUL_SCORE_MULTIPLIER = 0.9
+UNTRUTHFUL_PENALTY_MULTIPLIER = 1.2
 FAILED_PROPOSALS_BEFORE_COOLDOWN = 2
 # How far below the threshold (as a fraction of the bonus) we still accept a proposal.
 ACCEPT_PROPOSAL_MARGIN_FRACTION = 0.1
@@ -74,8 +88,10 @@ class Player4(BasePlayer):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
 		self.player_profiles: dict[int, PlayerProfile] = {}
-		# Dated players below the current threshold, kept for when it drops.
-		self.back_burner: dict[int, PlayerProfile] = {}
+		# Expected score from every first date, kept sorted for the threshold quantile.
+		# Dated players below the threshold stay in player_profiles and come back
+		# into choose_dates once it drops.
+		self.first_date_scores: list[float] = []
 
 	# ----- helpers -----
 
@@ -88,9 +104,13 @@ class Player4(BasePlayer):
 		return dim < self.monotonic
 
 	def _mask_value(self, dim: int, value: int) -> int:
-		"""Hide extremes: raise low monotonic values, pull regular values into [2, 8]."""
+		"""Hide extremes: pull regular values into [2, 8].
+
+		Monotonic values stay true. Inflating them makes a partner marry us
+		expecting more than we have, and we pay half of their real penalty.
+		"""
 		if self._is_monotonic(dim):
-			return max(value, MONOTONIC_PROJECTION_FLOOR)
+			return value
 		return min(max(value, REGULAR_PROJECTION_LOW), REGULAR_PROJECTION_HIGH)
 
 	def _masked_profile(self) -> Profile:
@@ -107,22 +127,35 @@ class Player4(BasePlayer):
 			return 0
 		return (desired - actual) ** 2
 
-	def _threshold_score(self, round_number: int) -> float:
-		"""Minimum expected score to ask again / propose this round.
-
-		Flat at 80% of the bonus for the first 10% of rounds, flat at 0 for the
-		last 10%, linear in between.
-		"""
+	def _ramp_progress(self, round_number: int) -> float:
+		"""0 for the first 10% of rounds, 1 for the last 10%, linear in between."""
 		progress = (round_number - 1) / self.rounds  # 0 on round 1, just under 1 on the last
 		ramp_start = FLAT_THRESHOLD_SHARE
 		ramp_end = 1 - FLAT_THRESHOLD_SHARE
 		# Clamp progress through the ramp to [0, 1].
-		ramp_progress = min(max((progress - ramp_start) / (ramp_end - ramp_start), 0.0), 1.0)
-		fraction = (
-			EARLY_THRESHOLD_FRACTION
-			+ (LATE_THRESHOLD_FRACTION - EARLY_THRESHOLD_FRACTION) * ramp_progress
+		return min(max((progress - ramp_start) / (ramp_end - ramp_start), 0.0), 1.0)
+
+	def _threshold_score(self, round_number: int) -> float:
+		"""Minimum expected score to ask again / propose this round.
+
+		A quantile of the first-date scores seen so far, falling from the 90th
+		percentile to the minimum along the ramp, and never below 0. Scores scale
+		with B and the population, so the threshold does too.
+		"""
+		ramp_progress = self._ramp_progress(round_number)
+		scores = self.first_date_scores
+		if len(scores) < MIN_SCORES_FOR_QUANTILE:
+			# Too few dates to trust a quantile: falling fraction of the bonus,
+			# smaller in short runs (5 rounds -> a quarter of the usual fraction).
+			fraction = FALLBACK_THRESHOLD_FRACTION * min(1.0, self.rounds / FULL_FALLBACK_ROUNDS)
+			return fraction * (1 - ramp_progress) * self.bonus
+		quantile = (
+			EARLY_THRESHOLD_QUANTILE
+			+ (LATE_THRESHOLD_QUANTILE - EARLY_THRESHOLD_QUANTILE) * ramp_progress
 		)
-		return fraction * self.bonus
+		# Index of that quantile in the sorted scores, clamped to the last one.
+		position = min(int(quantile * len(scores)), len(scores) - 1)
+		return max(0.0, scores[position])
 
 	def _ad_penalty(self, advertisement: Advertisement) -> float:
 		"""Lower is better: expected penalty implied by their ad alone.
@@ -141,19 +174,23 @@ class Player4(BasePlayer):
 		"""Happiness if we married them, taking their projection and stated ideal as true."""
 		my_penalty = decrement(self.ideal, partner.projected_profile, self.monotonic)
 		their_penalty = decrement(partner.stated_ideal, self.profile, self.monotonic)
-		score = self.bonus - my_penalty - their_penalty / 2
+		total_penalty = my_penalty + their_penalty / 2
 		if partner.is_untruthful:
-			score *= UNTRUTHFUL_SCORE_MULTIPLIER
-		return score
+			# Inflate the penalty, not shrink the score: the discount then means the
+			# same at any B and never pushes a negative score up towards 0.
+			total_penalty *= UNTRUTHFUL_PENALTY_MULTIPLIER
+		return self.bonus - total_penalty
 
 	def _check_truthfulness(
 		self, partner: PlayerProfile, observed: Profile, stated_ideal: Profile
 	) -> None:
-		"""Flag them if this date contradicts their ad or their previous date."""
+		"""Flag them if this date contradicts their ad or their previous date.
+
+		Only the ad's own half is checked. Some honest players post a made-up
+		seek value (always 0, say) and still describe their true ideal.
+		"""
 		ad = partner.advertisement
-		contradicts_ad = ad is not None and (
-			observed[ad.own_dim] != ad.own_value or stated_ideal[ad.seek_dim] != ad.seek_value
-		)
+		contradicts_ad = ad is not None and observed[ad.own_dim] != ad.own_value
 		changed_since_last_date = partner.projected_profile is not None and (
 			observed != partner.projected_profile or stated_ideal != partner.stated_ideal
 		)
@@ -226,10 +263,12 @@ class Player4(BasePlayer):
 			round=date.round, date_number=date.date_number, expected_score=partner.expected_score
 		)
 		partner.dating_history.append(date_record)
+		if date.date_number == 1:
+			insort(self.first_date_scores, partner.expected_score)
 
-		# Marrying them would cost us: the only place we mark incompatible.
-		if partner.expected_score < 0:
-			self.back_burner.pop(partner.index, None)
+		# Marrying them would not beat staying single (0): the only place we mark
+		# incompatible.
+		if partner.expected_score <= 0:
 			return Decision(incompatible=True)
 
 		clears_threshold = partner.expected_score >= self._threshold_score(date.round)
@@ -238,14 +277,12 @@ class Player4(BasePlayer):
 		may_ask_again = not partner.is_in_cooldown(date.round)
 
 		if clears_threshold or (can_propose and partner.accept_next_proposal_chance):
-			self.back_burner.pop(partner.index, None)
 			if can_propose:
 				date_record.we_proposed = True
 				return Decision(again=may_ask_again, propose=True)
 			return Decision(again=True)
 
 		# Good enough to keep, not good enough yet: wait for the threshold to drop.
-		self.back_burner[partner.index] = partner
 		return Decision()
 
 	def on_outcome(self, outcome: DateOutcome) -> None:
@@ -266,7 +303,7 @@ class Player4(BasePlayer):
 		if outcome.partner_proposed and not date_record.we_proposed:
 			shortfall = self._threshold_score(outcome.round) - date_record.expected_score
 			if (
-				date_record.expected_score >= 0
+				date_record.expected_score > 0
 				and shortfall <= ACCEPT_PROPOSAL_MARGIN_FRACTION * self.bonus
 			):
 				partner.accept_next_proposal_chance = True
