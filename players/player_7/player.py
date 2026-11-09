@@ -13,9 +13,15 @@ partner, so copies agree on who marries whom without sharing any state. The
 matching repeatedly pairs the person with the fewest compatible partners, so
 people with many options do not take the only option of someone with few.
 
+Copies recognise each other honestly: our ad's dimensions are a checksum of
+our true profile and ideal, which a date reveals. Only recognised copies go
+into the shared matching. Anyone else will not wait for a matching they do not
+compute, so we take them as soon as they are at least as good for us as our
+assigned partner, and we stop counting on them after two snubs.
+
 1. Explore: list people we have not met, ranked by how well their ad fits us.
-2. Commit: list only our assigned partner, ask for repeat dates, and propose
-   from the second date on.
+2. Commit: once we have met everyone, list only our assigned partner, ask for
+   repeat dates, and propose from the second date on.
 3. Fall back: if the assigned partner does not respond, or time is running
    out, propose to any compatible person, best first.
 
@@ -56,6 +62,22 @@ STALL = 5
 ENDGAME = 6
 # A person not seen among the candidates for this many rounds has married.
 GONE_AFTER = 3
+# Unanswered proposals or refused repeat dates before we stop counting on
+# someone outside our group: they keep dating us but will not marry us.
+SNUBS = 2
+
+
+def _ad(profile: Profile, ideal: Profile) -> Advertisement:
+	"""Our honest ad, with both dimensions picked by a checksum of our profile
+	and ideal. A date shows us a partner's true profile and ideal, and if they
+	produce exactly the ad that partner showed, the partner runs this player.
+	Other groups pick dimensions by value, so they rarely match by chance."""
+	d = len(profile)
+	h = sum(
+		(i + 1) * (3 * p + 7 * q + 1) for i, (p, q) in enumerate(zip(profile, ideal, strict=True))
+	)
+	own, seek = h % d, h // d % d
+	return Advertisement(own_dim=own, own_value=profile[own], seek_dim=seek, seek_value=ideal[seek])
 
 
 class Player7(BasePlayer):
@@ -73,6 +95,9 @@ class Player7(BasePlayer):
 		self.proposed_to_me: set[int] = set()
 		# Partners who ignored us, and how long we have waited on the current one.
 		self.unresponsive: dict[int, int] = {}
+		# How often each person ignored our proposal or our request to meet again.
+		self.snubs: dict[int, int] = {}
+		self.asked: dict[int, Decision] = {}
 		self.last_new = 0
 		self.exploring = True
 		self.target: int | None = None
@@ -152,11 +177,18 @@ class Player7(BasePlayer):
 	# Matching
 	# ------------------------------------------------------------------
 
+	def _kin(self, who: int) -> bool:
+		"""Whether ``who`` runs this player: honest, and their ad is exactly the
+		one we would write for the profile and ideal they showed us."""
+		return self._trusted(who) and self.ads.get(who) == _ad(
+			self.shown[who][0], self.stated[who][0]
+		)
+
 	def _singles(self) -> list[int]:
 		return [
 			who
 			for who in self.shown
-			if self.round - self.last_seen.get(who, -GONE_AFTER) < GONE_AFTER and self._trusted(who)
+			if self.round - self.last_seen.get(who, -GONE_AFTER) < GONE_AFTER and self._kin(who)
 		]
 
 	def _assign(self) -> int | None:
@@ -169,7 +201,7 @@ class Player7(BasePlayer):
 		edges: dict[int, set[int]] = {p: set() for p in people + [me]}
 		weight: dict[tuple[int, int], float] = {}
 		for p in people:
-			if self.round - self.unresponsive.get(p, -COOLDOWN) < COOLDOWN:
+			if self.round - self.unresponsive.get(p, -COOLDOWN) < COOLDOWN or self._snubbed(p):
 				continue
 			ours, their = self._with_me(p)
 			if ours > 0 and their > 0:
@@ -199,6 +231,11 @@ class Player7(BasePlayer):
 					edges[y].discard(x)
 				edges[x] = set()
 
+	def _snubbed(self, who: int) -> bool:
+		if who in self.proposed_to_me or self._kin(who):
+			return False
+		return self.snubs.get(who, 0) >= SNUBS
+
 	def _best_compatible(self) -> list[int]:
 		"""Singles we would be positive with, best for us first."""
 		scored = []
@@ -207,33 +244,15 @@ class Player7(BasePlayer):
 				continue
 			ours, their = self._with_me(who)
 			if ours > 0 and (their > 0 or who in self.proposed_to_me):
-				scored.append((ours, who))
-		return [who for _, who in sorted(scored, reverse=True)]
+				scored.append((not self._snubbed(who), ours, who))
+		return [who for *_, who in sorted(scored, reverse=True)]
 
 	# ------------------------------------------------------------------
 	# Interface
 	# ------------------------------------------------------------------
 
 	def advertise(self) -> Advertisement:
-		# Show the dimension where our true value most lowers a seeker's expected
-		# cost, and ask for the one where a random partner would cost us most.
-		def relief(dim: int) -> float:
-			v = self.profile[dim]
-			return sum(
-				n * (self._cost(dim, w, 5) - self._cost(dim, w, v))
-				for w, n in zip(VALUES, PRIOR, strict=True)
-			)
-
-		def risk(dim: int) -> float:
-			return sum(
-				n * self._cost(dim, self.ideal[dim], v) for v, n in zip(VALUES, PRIOR, strict=True)
-			)
-
-		own = max(range(self.dims), key=relief)
-		seek = max(range(self.dims), key=risk)
-		return Advertisement(
-			own_dim=own, own_value=self.profile[own], seek_dim=seek, seek_value=self.ideal[seek]
-		)
+		return _ad(self.profile, self.ideal)
 
 	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
 		self.round = turn.round
@@ -289,22 +308,44 @@ class Player7(BasePlayer):
 		self.shown.setdefault(who, []).append(tuple(observed))
 		self.stated.setdefault(who, []).append(tuple(stated_ideal))
 
+		decision = self._decide(date, who)
+		self.asked[who] = decision
+		return decision
+
+	def _decide(self, date: DateContext, who: int) -> Decision:
 		ours, their = self._with_me(who)
 		if ours <= 0:
 			return Decision()
 
 		if who == self.target:
 			self.waited = 0
+			# A copy of us waits until both have met everyone, so the matching
+			# is built from the whole market rather than the first few dates.
+			if self.exploring and self._kin(who):
+				return Decision()
 			return Decision(again=True, propose=date.date_number >= 2)
 
 		# Someone who already proposed, anyone compatible once the matching has
 		# nobody for us, or anyone compatible near the end.
 		willing = their > 0 or who in self.proposed_to_me
 		late = date.rounds_left <= ENDGAME or self.target is None and not self.exploring
+		# Someone outside our matching will not wait for us: take them if they
+		# are at least as good as the partner the matching offers.
+		if their > 0 and not self._kin(who):
+			mine = self._with_me(self.target)[0] if self.target in self.shown else 0
+			if ours >= mine:
+				return Decision(again=True, propose=date.date_number >= 2)
 		if who in self.proposed_to_me or late:
 			return Decision(again=willing, propose=willing and date.date_number >= 2)
 		return Decision()
 
 	def on_outcome(self, outcome: DateOutcome) -> None:
+		who = outcome.partner
 		if outcome.partner_proposed:
-			self.proposed_to_me.add(outcome.partner)
+			self.proposed_to_me.add(who)
+		asked = self.asked.pop(who, None)
+		snubbed = asked is not None and (
+			asked.propose and not outcome.partner_proposed or asked.again and not outcome.again
+		)
+		if snubbed and not outcome.married:
+			self.snubs[who] = self.snubs.get(who, 0) + 1

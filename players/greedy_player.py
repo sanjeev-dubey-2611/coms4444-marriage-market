@@ -33,11 +33,13 @@ class GreedyPlayer(BasePlayer):
 		self.proposed_to_me: set[int] = set()
 
 	def advertise(self) -> Advertisement:
-		# Show off the monotonic dimension we score best on, and ask for the
-		# dimension where our ideal is furthest from the middle of the scale.
+		# Show off the monotonic dimension we score best on, and 
 		showable = range(self.monotonic) if self.monotonic else range(self.dims)
 		own = max(showable, key=lambda i: self.profile[i])
+		
+		# ask for the dimension where our ideal is furthest from the middle of the scale.
 		seek = max(range(self.dims), key=lambda i: abs(self.ideal[i] - 5))
+		
 		return Advertisement(
 			own_dim=own, own_value=self.profile[own], seek_dim=seek, seek_value=self.ideal[seek]
 		)

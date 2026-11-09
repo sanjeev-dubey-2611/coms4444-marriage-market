@@ -353,6 +353,34 @@ def test_trait_penalty_colors():
 	assert penalty_color(100) == penalty_color(200)
 
 
+def test_group_label_from_player_name():
+	from ui.gui import group_label
+
+	assert group_label('Player4') == '4'
+	assert group_label('Player10') == '10'
+	assert group_label('GreedyPlayer') == 'g'
+	assert group_label('RandomPlayer') == 'r'
+
+
+def test_summary_tab_lists_married_by_happiness(screen):
+	view = Visualizer(build())
+	view.jump_to(40)
+	view.tab = 'summary'
+	rows = view.marriage_summary()
+	assert rows
+	assert all(partner is not None for _, _, partner, _, _, _ in rows)
+	assert all(partner_group for _, _, _, partner_group, _, _ in rows)
+	happiness = [score for *_, score, _ in rows]
+	assert happiness == sorted(happiness, reverse=True)
+	view.draw(screen)
+	view.type_key(pygame.K_t, 't')
+	assert view.tab == 'participant'
+	view.type_key(pygame.K_t, 't')
+	assert view.tab == 'summary'
+	view.select_at(view.tab_participant.center)
+	assert view.tab == 'participant'
+
+
 def test_profile_switches_from_date_to_true_spouse(screen):
 	view = Visualizer(build())
 	view.advance()

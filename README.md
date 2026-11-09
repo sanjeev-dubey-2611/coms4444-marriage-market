@@ -87,7 +87,10 @@ The visualizer focuses on one participant at a time. Enter an ID in the
 One panel shows that person's status, happiness, profiles, advertisement,
 and dating history. Click a history row for a brief pairing/result explanation.
 Scroll to see older dates; Page Up/Down pages long profiles.
-These are engine-truth debugging views, not extra information given to players.
+The **Summary** tab (`T`, or click Summary) lists every married person so far
+with group number, partner id, partner group, and happiness, sorted high to low.
+Click a row to jump to that participant. These are engine-truth debugging views,
+not extra information given to players.
 
 The header shows only people, singles, married couples, and the current round.
 Happiness is explicit for every person, including zero for unmarried people.

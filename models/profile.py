@@ -241,9 +241,10 @@ def compose_distribution(
 			f'dim map names dimension(s) {unknown_dims} but d={dims} only allows 0..{dims - 1}'
 		)
 	if default not in PRESETS:
-		raise ValueError(f'unknown default distribution {default!r}; choose one of {", ".join(PRESETS)}')
+		raise ValueError(
+			f'unknown default distribution {default!r}; choose one of {", ".join(PRESETS)}'
+		)
 
-	fallback = build_distribution(default, dims, monotonic)
 	rows: list[DistributionRow] = []
 	labels: list[str] = []
 	for i in range(dims):

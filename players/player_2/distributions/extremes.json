@@ -1,0 +1,17 @@
+{
+  "name": "extremes",
+  "description": "Distribution with a high probability of extreme values and a low probability of moderate values.",
+  "P": [
+    0.47,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.006,
+    0.476
+  ]
+}

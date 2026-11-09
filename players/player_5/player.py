@@ -12,8 +12,10 @@ invisible to the simulator - no error, just a player that never turns up.
 This directory is not itself discovered - the registry only matches
 ``player_<digits>`` - so the template can never appear in a run as a competitor.
 """
+
 import math
 import statistics
+
 from models.player import (
 	Advertisement,
 	Candidate,
@@ -25,6 +27,7 @@ from models.player import (
 )
 from models.player import Player as BasePlayer
 from models.profile import Profile, happiness
+
 
 class DatedPartner:
 	def __init__(self):
@@ -48,16 +51,12 @@ class DatedPartner:
 		self.marriage_requested_count = self.marriage_requested_count + int(propose_again)
 
 	def __str__(self):
-		aggregated_details = "\nprofile: {}, ideal:{}, advertisement:{}".format(
-			self.profile, self.ideal, self.advertisement
+		aggregated_details = (
+			f'\nprofile: {self.profile}, ideal:{self.ideal}, advertisement:{self.advertisement}'
 		)
-		history_details = "profile_history:{}, ideal_history:{}, advertisement_history:{}".format(
-			self.profile_history, self.ideal_history, self.advertisement_history
-		)
-		interaction_details = "date_accepted_count:{}, date_requested_count:{}, marriage_requested_count:{}".format(
-			self.date_accepted_count, self.date_requested_count, self.marriage_requested_count
-		)
-		return "\n".join([aggregated_details, history_details, interaction_details])
+		history_details = f'profile_history:{self.profile_history}, ideal_history:{self.ideal_history}, advertisement_history:{self.advertisement_history}'
+		interaction_details = f'date_accepted_count:{self.date_accepted_count}, date_requested_count:{self.date_requested_count}, marriage_requested_count:{self.marriage_requested_count}'
+		return '\n'.join([aggregated_details, history_details, interaction_details])
 
 
 class Player5(BasePlayer):
@@ -141,31 +140,60 @@ class Player5(BasePlayer):
 		"""
 
 		print()
-		print("self.rounds", self.rounds, "self.people", self.people)
-		print("Turn:", turn)
+		print('self.rounds', self.rounds, 'self.people', self.people)
+		print('Turn:', turn)
 		time_criteria = turn.round / self.rounds < self.exploration_time_fraction
-		people_criteria = (self.people - turn.singles) / self.people < self.exploration_people_fraction
+		people_criteria = (
+			self.people - turn.singles
+		) / self.people < self.exploration_people_fraction
 		self.exploration_mode = time_criteria and people_criteria
 		self.mark_partners_out_of_system(candidates)
 
-		happiness_scores = dict(sorted(self.get_dated_partners_vs_happiness().items(), key=lambda item: item[1], reverse=True))
+		happiness_scores = dict(
+			sorted(
+				self.get_dated_partners_vs_happiness().items(),
+				key=lambda item: item[1],
+				reverse=True,
+			)
+		)
 		avg_happiness, std_happiness = 0, 0
 		if len(happiness_scores) > self.data_sanity_count:
-			avg_happiness, std_happiness = statistics.mean(happiness_scores.values()), statistics.stdev(happiness_scores.values())
+			avg_happiness, std_happiness = (
+				statistics.mean(happiness_scores.values()),
+				statistics.stdev(happiness_scores.values()),
+			)
 			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
-		good_partners = [p_idx for p_idx, p_score in happiness_scores.items() if p_score >= avg_happiness and p_score > 0]
-		unexplored_partners = [c.index for c in sorted(candidates, key=lambda x: x.dates, reverse=False)]
+		good_partners = [
+			p_idx
+			for p_idx, p_score in happiness_scores.items()
+			if p_score >= avg_happiness and p_score > 0
+		]
+		unexplored_partners = [
+			c.index for c in sorted(candidates, key=lambda x: x.dates, reverse=False)
+		]
 
 		if self.exploration_mode:
-			print("[exploration mode]", "time_criteria:", time_criteria, "people_criteria:", people_criteria)
+			print(
+				'[exploration mode]',
+				'time_criteria:',
+				time_criteria,
+				'people_criteria:',
+				people_criteria,
+			)
 			chosen = unexplored_partners
 			chosen = [x for x in chosen if x != self.index]
 		else:
-			print("[exploitation mode]", "time_criteria:", time_criteria, "people_criteria:", people_criteria)
+			print(
+				'[exploitation mode]',
+				'time_criteria:',
+				time_criteria,
+				'people_criteria:',
+				people_criteria,
+			)
 			chosen = good_partners
 			chosen = [x for x in chosen if x != self.index]
 
-		print("chosen:", chosen[: self.list_limit])
+		print('chosen:', chosen[: self.list_limit])
 		return chosen[: self.list_limit]
 
 	def project(self, date: DateContext) -> Profile:
@@ -208,63 +236,101 @@ class Player5(BasePlayer):
 		proposal, no incompatibility) for decide. Your failure never affects the
 		other groups.
 		"""
-		print("current date details:", "id:", date.partner, "ad:", date.partner_ad, "date_number:", date.date_number)
+		print(
+			'current date details:',
+			'id:',
+			date.partner,
+			'ad:',
+			date.partner_ad,
+			'date_number:',
+			date.date_number,
+		)
 		if date.partner not in self.dated_partner_history:
 			self.dated_partner_history[date.partner] = DatedPartner()
-		self.dated_partner_history[date.partner].update_information(observed, stated_ideal, date.partner_ad)
+		self.dated_partner_history[date.partner].update_information(
+			observed, stated_ideal, date.partner_ad
+		)
 		happiness_scores = self.get_dated_partners_vs_happiness()
-		print("happiness_scores:", happiness_scores)
+		print('happiness_scores:', happiness_scores)
 		current_happiness = happiness_scores[date.partner]
 		avg_happiness, std_happiness = 0, 0
 		if len(happiness_scores) > self.data_sanity_count:
-			avg_happiness, std_happiness = statistics.mean(happiness_scores.values()), statistics.stdev(happiness_scores.values())
+			avg_happiness, std_happiness = (
+				statistics.mean(happiness_scores.values()),
+				statistics.stdev(happiness_scores.values()),
+			)
 			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
 		progress = (date.round - 1) / max(1, self.rounds - 1)
 		k_std_away = self.initial_k_std_away * (1 - progress)
 		print(
-			"current_happiness:", current_happiness,
-			"date_again:", avg_happiness,
-			"k_std_away:", k_std_away,
-			"propose_again:", avg_happiness + k_std_away * std_happiness,
-			"never_again:", avg_happiness - 1.5 * std_happiness,
-			"Date History:", self.dated_partner_history[date.partner],
-			"max_marriage_requests_per_person", self.max_marriage_requests_per_person,
-			"max_date_requests_per_person", self.max_date_requests_per_person,
+			'current_happiness:',
+			current_happiness,
+			'date_again:',
+			avg_happiness,
+			'k_std_away:',
+			k_std_away,
+			'propose_again:',
+			avg_happiness + k_std_away * std_happiness,
+			'never_again:',
+			avg_happiness - 1.5 * std_happiness,
+			'Date History:',
+			self.dated_partner_history[date.partner],
+			'max_marriage_requests_per_person',
+			self.max_marriage_requests_per_person,
+			'max_date_requests_per_person',
+			self.max_date_requests_per_person,
 		)
 		date_again = (
-			current_happiness >= avg_happiness and
-			current_happiness > 0 and
-			self.dated_partner_history[date.partner].date_requested_count < self.max_date_requests_per_person
+			current_happiness >= avg_happiness
+			and current_happiness > 0
+			and self.dated_partner_history[date.partner].date_requested_count
+			< self.max_date_requests_per_person
 		)
 		propose_again = (
-			date.date_number >= 2 and
-			current_happiness >= (avg_happiness + k_std_away * std_happiness) and
-			current_happiness > 0 and
-			self.dated_partner_history[date.partner].marriage_requested_count < self.max_marriage_requests_per_person
+			date.date_number >= 2
+			and current_happiness >= (avg_happiness + k_std_away * std_happiness)
+			and current_happiness > 0
+			and self.dated_partner_history[date.partner].marriage_requested_count
+			< self.max_marriage_requests_per_person
 		)
 		never_again = (
-			current_happiness < (avg_happiness - 1.5 * std_happiness) or
-			self.dated_partner_history[date.partner].date_requested_count >= self.max_date_requests_per_person or
-			self.dated_partner_history[date.partner].marriage_requested_count >= self.max_marriage_requests_per_person
+			current_happiness < (avg_happiness - 1.5 * std_happiness)
+			or self.dated_partner_history[date.partner].date_requested_count
+			>= self.max_date_requests_per_person
+			or self.dated_partner_history[date.partner].marriage_requested_count
+			>= self.max_marriage_requests_per_person
 		)
 		if self.exploration_mode:
 			date_again, propose_again, never_again = False, False, False
 		if never_again:
 			date_again, propose_again = False, False
 		self.dated_partner_history[date.partner].update_request_counts(date_again, propose_again)
-		print("date_again:", date_again, "propose_again:", propose_again, "never_again:", never_again, "\n\n")
-		return Decision(
-			again=date_again,
-			propose=propose_again,
-			incompatible=never_again
+		print(
+			'date_again:',
+			date_again,
+			'propose_again:',
+			propose_again,
+			'never_again:',
+			never_again,
+			'\n\n',
 		)
+		return Decision(again=date_again, propose=propose_again, incompatible=never_again)
 
 	def get_dated_partners_vs_happiness(self):
 		happiness_scores = dict()
 		for partner_id, partner_history in self.dated_partner_history.items():
 			partner_scores = list()
-			for partner_profile, partner_ideal in zip(partner_history.profile_history, partner_history.ideal_history):
-				score = happiness(self.bonus, self.profile, self.ideal, partner_profile, partner_ideal, self.monotonic)
+			for partner_profile, partner_ideal in zip(
+				partner_history.profile_history, partner_history.ideal_history, strict=False
+			):
+				score = happiness(
+					self.bonus,
+					self.profile,
+					self.ideal,
+					partner_profile,
+					partner_ideal,
+					self.monotonic,
+				)
 				partner_scores.append(score)
 			happiness_scores[partner_id] = min(partner_scores)
 		return happiness_scores

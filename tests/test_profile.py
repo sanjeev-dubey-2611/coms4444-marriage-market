@@ -107,7 +107,9 @@ def test_load_distribution_row_accepts_bare_keyed_or_one_row_table(tmp_path):
 	keyed.write_text(json.dumps({'P': row}))
 	table = tmp_path / 'table.json'
 	table.write_text(json.dumps({'P': [row]}))
-	assert load_distribution_row(bare) == load_distribution_row(keyed) == load_distribution_row(table)
+	assert (
+		load_distribution_row(bare) == load_distribution_row(keyed) == load_distribution_row(table)
+	)
 
 
 def test_load_distribution_row_rejects_multi_row_tables(tmp_path):
