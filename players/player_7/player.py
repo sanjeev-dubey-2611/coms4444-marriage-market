@@ -16,8 +16,15 @@ people with many options do not take the only option of someone with few.
 Copies recognise each other honestly: our ad's dimensions are a checksum of
 our true profile and ideal, which a date reveals. Only recognised copies go
 into the shared matching. Anyone else will not wait for a matching they do not
-compute, so we take them as soon as they are at least as good for us as our
-assigned partner, and we stop counting on them after two snubs.
+compute, so we take them once they beat both our assigned partner and a
+patience bar: what we expect to end up with if we hold out for the people we
+can still meet. The bar is reasoned dimension by dimension. Under the values
+we have seen, each dimension has an expected cost and a variance, and since
+dimensions are drawn independently these add up to the mean and spread of our
+happiness with a random partner. The bar falls to zero as the unmet people
+run out, so we stay picky early and never miss the end. We stop counting on
+anyone who snubs us twice, and we block outsiders who are hopeless for us so
+the engine stops spending our dates on them.
 
 1. Explore: list people we have not met, ranked by how well their ad fits us.
 2. Commit: once we have met everyone, list only our assigned partner, ask for
@@ -27,10 +34,13 @@ assigned partner, and we stop counting on them after two snubs.
 
 We never propose unless our own happiness would be positive. A partner whose
 projected profile changes between dates or contradicts their ad is treated as
-no better than a random person and is left out of the shared graph.
+no better than a random person and is left out of the shared graph. A partner
+whose stated ideal is just our own profile is flattering us: we assume an
+average ideal for them and that the value our ad asked for was nudged by 2.
 """
 
 import math
+from statistics import NormalDist
 
 from models.player import (
 	Advertisement,
@@ -46,6 +56,7 @@ from models.player import Player as BasePlayer
 from models.profile import Profile, decrement
 
 VALUES = range(11)
+NORMAL = NormalDist()
 
 # Pseudo-counts per value before any date: a broad bell around 5, so the first
 # ad-based estimates are sensible and real observations soon dominate.
@@ -65,6 +76,13 @@ GONE_AFTER = 3
 # Unanswered proposals or refused repeat dates before we stop counting on
 # someone outside our group: they keep dating us but will not marry us.
 SNUBS = 2
+# The chance that any one person we have yet to meet turns into a real option
+# for us, when deciding how picky to be with outsiders.
+CHANCE = 0.2
+# A stated ideal within this distance of our own profile is flattery.
+MIRROR = 1
+# How far a flatterer may have nudged the value our ad asked for.
+NUDGE = 2
 
 
 def _ad(profile: Profile, ideal: Profile) -> Advertisement:
@@ -145,16 +163,44 @@ class Player7(BasePlayer):
 
 	def _trusted(self, who: int) -> bool:
 		"""Honest people show the same profile every time, matching their ad."""
-		shown, stated = self.shown[who], self.stated[who]
-		if any(p != shown[0] for p in shown) or any(s != stated[0] for s in stated):
+		if self._mirror(who):
+			return False
+		stated = self.stated[who]
+		return self._consistent(who) and all(s == stated[0] for s in stated)
+
+	def _consistent(self, who: int) -> bool:
+		"""They show the same profile every time, matching their ad."""
+		shown = self.shown[who]
+		if any(p != shown[0] for p in shown):
 			return False
 		ad = self.ads.get(who)
 		return ad is None or shown[0][ad.own_dim] == ad.own_value
 
+	def _mirror(self, who: int) -> bool:
+		"""Their stated ideal is (almost) exactly our own profile: flattery
+		rather than a real ideal, which an honest person almost never has."""
+		stated = self.stated[who][-1]
+		return sum(abs(a - b) for a, b in zip(stated, self.profile, strict=True)) <= MIRROR
+
 	def _with_me(self, who: int) -> tuple[float, float]:
 		"""(our happiness, their happiness) if we married ``who``. For someone we
 		do not trust, every dimension costs at least what a random person costs."""
-		mine, _ = self._expected_costs()
+		mine, theirs = self._expected_costs()
+		if self._mirror(who) and self._consistent(who):
+			# A flatterer's stated ideal tells us nothing, so assume an average
+			# one. Their profile mostly stands, but the value our ad asked for
+			# may have been nudged in our favour.
+			seek = self.advertise().seek_dim
+			shown = self.shown[who][0]
+			ours = 0.0
+			for dim in range(self.dims):
+				near = range(max(0, shown[dim] - NUDGE), min(10, shown[dim] + NUDGE) + 1)
+				if dim == seek:
+					ours += max(self._cost(dim, self.ideal[dim], v) for v in near)
+				else:
+					ours += self._cost(dim, self.ideal[dim], shown[dim])
+			their = sum(theirs)
+			return self.bonus - ours - their / 2, self.bonus - their - ours / 2
 		trusted = self._trusted(who)
 		ours = 0.0
 		for dim in range(self.dims):
@@ -162,6 +208,15 @@ class Player7(BasePlayer):
 			ours += worst if trusted else max(worst, mine[dim])
 		their = max(decrement(s, self.profile, self.monotonic) for s in self.stated[who])
 		return self.bonus - ours - their / 2, self.bonus - their - ours / 2
+
+	def _optimistic(self, who: int) -> float:
+		"""Our happiness with ``who`` if what they showed and said were true."""
+		ours = min(
+			sum(self._cost(d, self.ideal[d], p[d]) for d in range(self.dims))
+			for p in self.shown[who]
+		)
+		their = min(decrement(s, self.profile, self.monotonic) for s in self.stated[who])
+		return self.bonus - ours - their / 2
 
 	def _pair(self, a: int, b: int) -> float | None:
 		"""Total happiness if two other people married, or None unless both
@@ -231,20 +286,61 @@ class Player7(BasePlayer):
 					edges[y].discard(x)
 				edges[x] = set()
 
+	def _market(self) -> tuple[float, float]:
+		"""Mean and spread of our happiness with a random partner.
+
+		Each dimension is reasoned about on its own. Under the values seen so
+		far it has an expected cost and a variance, once for what we would lose
+		on it and once for the half of a random partner's loss that we share.
+		Dimensions are drawn independently, so the totals are just the sums."""
+		mean, variance = self.bonus, 0.0
+		for dim, row in enumerate(self.counts):
+			total = sum(row)
+			ours = [self._cost(dim, self.ideal[dim], v) for v in VALUES]
+			theirs = [self._cost(dim, w, self.profile[dim]) / 2 for w in VALUES]
+			for costs in (ours, theirs):
+				first = sum(n * c for n, c in zip(row, costs, strict=True)) / total
+				second = sum(n * c * c for n, c in zip(row, costs, strict=True)) / total
+				mean -= first
+				variance += second - first * first
+		return mean, math.sqrt(variance)
+
+	def _bar(self, rounds_left: int) -> float:
+		"""The happiness an outsider must offer us now: what we expect to end up
+		with if we hold out for the people we can still meet.
+
+		Holding out with nobody left to meet is worth zero. Each further person
+		is a random partner who turns into a real option with probability
+		CHANCE, and raises the bar by the amount they are expected to beat it.
+		It falls to zero as the unmet people run out."""
+		mean, spread = self._market()
+		bar = 0.0
+		if spread <= 0:
+			return bar
+		for _ in range(min(self.unmet, max(0, rounds_left - ENDGAME))):
+			z = (mean - bar) / spread
+			gain = CHANCE * spread * (NORMAL.pdf(z) + z * NORMAL.cdf(z))
+			if gain < 0.01:
+				break
+			bar += gain
+		return bar
+
 	def _snubbed(self, who: int) -> bool:
 		if who in self.proposed_to_me or self._kin(who):
 			return False
 		return self.snubs.get(who, 0) >= SNUBS
 
 	def _best_compatible(self) -> list[int]:
-		"""Singles we would be positive with, best for us first."""
+		"""Singles we would be positive with, best for us first. Outsiders count
+		even when we think they would not be: whether to accept is their call."""
 		scored = []
 		for who in self.shown:
 			if self.round - self.last_seen.get(who, -GONE_AFTER) >= GONE_AFTER:
 				continue
 			ours, their = self._with_me(who)
-			if ours > 0 and (their > 0 or who in self.proposed_to_me):
-				scored.append((not self._snubbed(who), ours, who))
+			likely = their > 0 or who in self.proposed_to_me
+			if ours > 0 and (likely or not self._kin(who)):
+				scored.append((not self._snubbed(who), likely, ours, who))
 		return [who for *_, who in sorted(scored, reverse=True)]
 
 	# ------------------------------------------------------------------
@@ -278,10 +374,14 @@ class Player7(BasePlayer):
 		if target is not None and not exploring:
 			return [target]
 		chosen = [target] if target is not None else []
+		later = []
 		if late or not exploring:
-			chosen += [w for w in self._best_compatible() if w in offered and w not in chosen]
+			for w in self._best_compatible():
+				if w in offered and w not in chosen:
+					# Someone who keeps turning us down goes behind new faces.
+					(later if self._snubbed(w) else chosen).append(w)
 		fresh.sort(key=lambda c: (-self._from_ad(c.ad), c.index))
-		chosen += [c.index for c in fresh]
+		chosen += [c.index for c in fresh] + later
 		return chosen[:limit]
 
 	def _retarget(self) -> None:
@@ -315,6 +415,11 @@ class Player7(BasePlayer):
 	def _decide(self, date: DateContext, who: int) -> Decision:
 		ours, their = self._with_me(who)
 		if ours <= 0:
+			# An outsider who is hopeless for us even taken at face value gets
+			# blocked, so the engine stops spending our dates on them. Copies
+			# are never blocked: they must stay visible for the shared matching.
+			if self._optimistic(who) <= 0 and not self._kin(who):
+				return Decision(incompatible=True)
 			return Decision()
 
 		if who == self.target:
@@ -327,15 +432,18 @@ class Player7(BasePlayer):
 
 		# Someone who already proposed, anyone compatible once the matching has
 		# nobody for us, or anyone compatible near the end.
-		willing = their > 0 or who in self.proposed_to_me
+		kin = self._kin(who)
+		willing = their > 0 or who in self.proposed_to_me or not kin
 		late = date.rounds_left <= ENDGAME or self.target is None and not self.exploring
+		bar = self._bar(date.rounds_left)
 		# Someone outside our matching will not wait for us: take them if they
-		# are at least as good as the partner the matching offers.
-		if their > 0 and not self._kin(who):
+		# beat both the partner the matching offers and what the rest of the
+		# market is likely to offer.
+		if not kin:
 			mine = self._with_me(self.target)[0] if self.target in self.shown else 0
-			if ours >= mine:
+			if ours >= max(mine, bar):
 				return Decision(again=True, propose=date.date_number >= 2)
-		if who in self.proposed_to_me or late:
+		if late or who in self.proposed_to_me and ours >= bar:
 			return Decision(again=willing, propose=willing and date.date_number >= 2)
 		return Decision()
 
