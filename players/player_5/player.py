@@ -1,345 +1,184 @@
-"""Starting point for a group's player.
+"""Choose between a repeat date and searching the remaining market."""
 
-Copy this whole directory to ``players/player_<k>/`` using your group number,
-then rename the class to ``Player<k>``. Group 4 would end up with
-``players/player_4/player.py`` containing ``class Player4``. The registry looks
-for exactly that; nothing else needs editing.
-
-Keep the ``__init__.py``. Discovery uses ``pkgutil.iter_modules``, which only
-reports directories that have one, so a group directory without it is silently
-invisible to the simulator - no error, just a player that never turns up.
-
-This directory is not itself discovered - the registry only matches
-``player_<digits>`` - so the template can never appear in a run as a competitor.
-"""
-
-import math
-import statistics
+from collections import deque
+from dataclasses import dataclass
+from math import sqrt
+from statistics import fmean
 
 from models.player import (
 	Advertisement,
 	Candidate,
 	DateContext,
+	DateOutcome,
 	Decision,
 	GameContext,
+	Player,
 	PlayerSnapshot,
 	RoundContext,
 )
-from models.player import Player as BasePlayer
-from models.profile import Profile, happiness
+from models.profile import Profile, decrement
 
 
-class DatedPartner:
-	def __init__(self):
-		self.profile, self.ideal, self.advertisement = None, None, None
-		self.profile_history, self.ideal_history, self.advertisement_history = [], [], []
-		self.date_requested_count = 0
-		self.date_accepted_count = 0
-		self.marriage_requested_count = 0
-
-	def update_information(self, profile: Profile, ideal: Profile, advertisement: Advertisement):
-		self.profile_history.append(profile)
-		self.ideal_history.append(ideal)
-		self.advertisement_history.append(advertisement)
-		self.date_accepted_count = self.date_accepted_count + 1
-		self.profile = self.profile_history[-1]
-		self.ideal = self.ideal_history[-1]
-		self.advertisement = self.advertisement_history[-1]
-
-	def update_request_counts(self, date_again, propose_again):
-		self.date_requested_count = self.date_requested_count + int(date_again)
-		self.marriage_requested_count = self.marriage_requested_count + int(propose_again)
-
-	def __str__(self):
-		aggregated_details = (
-			f'\nprofile: {self.profile}, ideal:{self.ideal}, advertisement:{self.advertisement}'
-		)
-		history_details = f'profile_history:{self.profile_history}, ideal_history:{self.ideal_history}, advertisement_history:{self.advertisement_history}'
-		interaction_details = f'date_accepted_count:{self.date_accepted_count}, date_requested_count:{self.date_requested_count}, marriage_requested_count:{self.marriage_requested_count}'
-		return '\n'.join([aggregated_details, history_details, interaction_details])
+def unknown_ideal_cost(profile: Profile, monotonic: int) -> float:
+	"""Expected partner penalty when each unknown target is uniform on 0–10."""
+	return sum(
+		fmean((max(0, want - have) if dim < monotonic else want - have) ** 2 for want in range(11))
+		for dim, have in enumerate(profile)
+	)
 
 
-class Player5(BasePlayer):
-	"""Rename me to Player<k>, where <k> is your group number.
+def mirrors_projection(stated_ideal: Profile, projection: Profile) -> bool:
+	"""Use exact copying as a signal when there are at least three traits."""
+	return len(projection) >= 3 and stated_ideal == projection
 
-	One instance of this class is one person. Your code may be used for several
-	people in the same simulation - perhaps all of them - with one instance per
-	person. Do not share state between instances (class attributes, module
-	globals, files): that is exactly the kind of bypass the handout forbids.
-	"""
+
+@dataclass
+class Courtship:
+	first_profile: Profile
+	own_loss: int
+	score: float = 0
+	partner_score: float = 0
+	offer_round: int = 0
+	declined_repeats: int = 0
+	declined_proposals: int = 0
+	retry_round: int = 0
+	asked: bool = False
+	proposed: bool = False
+
+
+class Player5(Player):
+	"""Retain viable matches and use observed alternatives to decide when to commit."""
 
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
+		self.history: dict[int, Courtship] = {}
+		self.first_scores: deque[float] = deque(maxlen=64)
+		self.available: tuple[Candidate, ...] = ()
+		self.prior_ideal_loss = unknown_ideal_cost(self.profile, self.monotonic)
+		self.unknown_trait_cost = tuple(
+			sum(self._loss(i, target, value) for value in range(11)) / 11
+			for i, target in enumerate(self.ideal)
+		)
+		self.unknown_seek_cost = tuple(
+			sum(self._loss(i, target, value) for target in range(11)) / 11
+			for i, value in enumerate(self.profile)
+		)
 
-		# super() has already set these from ctx and snapshot:
-		#
-		#   self.index      which person you are (0-based); others refer to you by it
-		#   self.id         your UUID, stable for the whole simulation
-		#   self.profile    your true profile T_p, a tuple of d ints in 0-10
-		#   self.ideal      your desired profile D_p, a tuple of d ints in 0-10
-		#   self.people     N, how many people are in the simulation
-		#   self.dims       d, the number of dimensions
-		#   self.monotonic  m, the first m dimensions are monotonic
-		#   self.rounds     t, how many rounds of dating there are
-		#   self.bonus      B, the marriage bonus
-		#   self.rng        private seeded random generator; use instead of random
-		#   self.list_limit maximum returned names, or None if disabled
-		#
-		# The engine constructs you once, before round 1. Anything you want to
-		# carry between rounds lives on self, so initialize it here.
-		self.dated_partner_history: dict[int, DatedPartner] = {}
-		self.exploration_time_fraction = 0.2
-		self.exploration_people_fraction = 0.2
-		self.data_sanity_count = 1
-		self.exploration_mode = True
-		self.random_match_rate = math.ceil(self.rounds / self.people)
-		self.max_date_requests_per_person = 3 * self.random_match_rate
-		self.max_marriage_requests_per_person = 3 * self.random_match_rate
-		self.initial_k_std_away = 0.5
+	def _loss(self, dim: int, want: int, have: int) -> int:
+		gap = want - have
+		return (max(0, gap) if dim < self.monotonic else gap) ** 2
 
 	def advertise(self) -> Advertisement:
-		"""Called once, before round 1. Fixed for the whole simulation.
+		own = min(range(self.dims), key=self.unknown_seek_cost.__getitem__)
+		seek = max(range(self.dims), key=self.unknown_trait_cost.__getitem__)
+		return Advertisement(own, self.profile[own], seek, self.ideal[seek])
 
-		Post one of your own characteristics and one characteristic you are
-		looking for. Neither has to be true.
-		"""
-		# If there are no monotonic dimensions, use dimension 0 for both traits.
-		own_dim = max(range(self.monotonic), key=lambda i: self.profile[i]) if self.monotonic else 0
-		seek_dim = min(range(self.monotonic), key=lambda i: self.ideal[i]) if self.monotonic else 0
-		return Advertisement(
-			own_dim=own_dim,
-			own_value=self.profile[own_dim],
-			seek_dim=seek_dim,
-			seek_value=0,
+	def _ad_value(self, ad: Advertisement) -> float:
+		own = self.unknown_trait_cost[ad.own_dim] - self._loss(
+			ad.own_dim, self.ideal[ad.own_dim], ad.own_value
 		)
+		theirs = self.unknown_seek_cost[ad.seek_dim] - self._loss(
+			ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim]
+		)
+		return own + 0.35 * theirs
 
 	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
-		"""Name the people you would like to date this round.
-
-		Called once per round while you are single, unless you are already on a
-		repeat date because you and your last date both asked for one.
-
-		WHAT YOU CAN SEE
-
-			candidate.index         who they are, stable for the whole run
-			candidate.ad            their advertisement, possibly a lie
-			candidate.dates         how many times you two have dated so far
-			turn.round              this round, 1-based
-			turn.rounds_left        rounds remaining, including this one
-			turn.singles            how many people are still single
-
-		HOW PAIRING WORKS
-
-			1. Pairs who both asked for another date are paired first.
-			2. Pairs who listed each other are paired at random.
-			3. Pairs where only one listed the other are paired at random.
-			4. Everyone left is paired at random.
-
-		Nobody is ever paired with someone either side marked incompatible, so
-		in rare cases you sit a round out.
-		"""
-
-		print()
-		print('self.rounds', self.rounds, 'self.people', self.people)
-		print('Turn:', turn)
-		time_criteria = turn.round / self.rounds < self.exploration_time_fraction
-		people_criteria = (
-			self.people - turn.singles
-		) / self.people < self.exploration_people_fraction
-		self.exploration_mode = time_criteria and people_criteria
-		self.mark_partners_out_of_system(candidates)
-
-		happiness_scores = dict(
-			sorted(
-				self.get_dated_partners_vs_happiness().items(),
-				key=lambda item: item[1],
-				reverse=True,
-			)
+		self.available = candidates
+		known = []
+		fresh = []
+		for candidate in candidates:
+			match = self.history.get(candidate.index)
+			if match is None:
+				if turn.rounds_left >= 2:
+					fresh.append(candidate)
+			elif match.score > 0 and match.retry_round <= turn.round:
+				known.append(candidate)
+		known.sort(
+			key=lambda candidate: self._match_value(self.history[candidate.index], turn.round),
+			reverse=True,
 		)
-		avg_happiness, std_happiness = 0, 0
-		if len(happiness_scores) > self.data_sanity_count:
-			avg_happiness, std_happiness = (
-				statistics.mean(happiness_scores.values()),
-				statistics.stdev(happiness_scores.values()),
-			)
-			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
-		good_partners = [
-			p_idx
-			for p_idx, p_score in happiness_scores.items()
-			if p_score >= avg_happiness and p_score > 0
-		]
-		unexplored_partners = [
-			c.index for c in sorted(candidates, key=lambda x: x.dates, reverse=False)
-		]
+		fresh.sort(key=lambda candidate: self._ad_value(candidate.ad), reverse=True)
+		width = max(1, int(sqrt(len(candidates))))
+		bar = self._search_value(turn.rounds_left, len(fresh))
+		ready = [c for c in known if self._match_value(self.history[c.index], turn.round) >= bar]
+		choices = (ready or known) if ready or not fresh else fresh
+		return [candidate.index for candidate in choices[:width][: self.list_limit]]
 
-		if self.exploration_mode:
-			print(
-				'[exploration mode]',
-				'time_criteria:',
-				time_criteria,
-				'people_criteria:',
-				people_criteria,
-			)
-			chosen = unexplored_partners
-			chosen = [x for x in chosen if x != self.index]
-		else:
-			print(
-				'[exploitation mode]',
-				'time_criteria:',
-				time_criteria,
-				'people_criteria:',
-				people_criteria,
-			)
-			chosen = good_partners
-			chosen = [x for x in chosen if x != self.index]
+	def _search_value(self, rounds_left: int, fresh: int) -> float:
+		attempts = min(fresh, rounds_left // 2)
+		if attempts == 0:
+			return 0.0
+		if not self.first_scores:
+			return max(0.0, self.bonus * 0.25)
+		# A recent upper-quartile score estimates the upside of a new date.
+		scores = sorted(self.first_scores)
+		upper = scores[3 * (len(scores) - 1) // 4]
+		return max(0.0, upper) * (1 - 0.65 ** min(attempts, 5))
 
-		print('chosen:', chosen[: self.list_limit])
-		return chosen[: self.list_limit]
+	def _match_value(self, match: Courtship, round_number: int) -> float:
+		if match.offer_round and round_number - match.offer_round <= 3:
+			return 0.9 * match.score
+		fit = 0.6 if match.partner_score > 0 else 0.3
+		return fit * match.score / (1 + match.declined_proposals)
 
-	def project(self, date: DateContext) -> Profile:
-		"""The profile your behaviour projects on this date.
-
-		Your date senses exactly what you return here. It does not have to be
-		your true profile, but your final happiness is scored on true profiles
-		only - and you also lose half of whatever your partner loses.
-		"""
-		return self.profile
-
-	def describe_ideal(self, date: DateContext, observed: Profile) -> Profile:
-		"""At the end of the date, describe the ideal partner you are seeking.
-
-		``observed`` is what your date projected. Honest or not, it is up to you.
-		"""
-		return self.ideal
+	def _reservation(self, date: DateContext) -> float:
+		# The last visible pool can be stale during a run of repeat dates.
+		fresh = sum(c.index != date.partner and c.index not in self.history for c in self.available)
+		known = max(
+			(
+				self._match_value(match, date.round)
+				for c in self.available
+				if c.index != date.partner
+				and (match := self.history.get(c.index)) is not None
+				and match.retry_round <= date.round
+			),
+			default=0.0,
+		)
+		if date.rounds_left <= 1:
+			return 0.0
+		return max(known, self._search_value(date.rounds_left - 1, fresh))
 
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
-		"""After the date: ask again, propose, or mark them incompatible.
-
-		``observed`` is what they projected; ``stated_ideal`` is the ideal
-		partner they described. ``date.date_number`` counts this date.
-
-		RULES
-
-			propose       only legal when date.date_number >= 2
-			again         if you both ask, you are paired first next round
-			incompatible  you will never be paired with them again
-
-		If you both propose on the same date you are married and leave the pool
-		for good. incompatible cannot be combined with again or propose.
-
-		IF YOU GET IT WRONG
-
-		An exception, a malformed return value, or taking longer than the
-		--timeout budget is recorded as a fault and the engine substitutes a
-		safe default: your true profile for project, your true ideal for
-		describe_ideal, nobody for choose_dates, and Decision() (no again, no
-		proposal, no incompatibility) for decide. Your failure never affects the
-		other groups.
-		"""
-		print(
-			'current date details:',
-			'id:',
-			date.partner,
-			'ad:',
-			date.partner_ad,
-			'date_number:',
-			date.date_number,
+		own_loss = decrement(self.ideal, observed, self.monotonic)
+		partner_loss = decrement(stated_ideal, self.profile, self.monotonic)
+		match = self.history.get(date.partner)
+		if match is None:
+			match = self.history[date.partner] = Courtship(observed, own_loss)
+		else:
+			match.own_loss = max(match.own_loss, own_loss)
+		if mirrors_projection(stated_ideal, self.profile):
+			partner_loss = 0.25 * partner_loss + 0.75 * self.prior_ideal_loss
+		match.score = self.bonus - match.own_loss - partner_loss / 2
+		match.partner_score = self.bonus - partner_loss - match.own_loss / 2
+		if date.date_number == 1:
+			self.first_scores.append(match.score)
+		bar = self._reservation(date)
+		match.proposed = date.date_number >= 2 and match.score > 0 and match.score >= bar
+		match.asked = (
+			date.rounds_left > 1
+			and match.score > 0
+			and match.score >= bar
+			and (date.rounds_left <= 2 or self._match_value(match, date.round) >= bar)
 		)
-		if date.partner not in self.dated_partner_history:
-			self.dated_partner_history[date.partner] = DatedPartner()
-		self.dated_partner_history[date.partner].update_information(
-			observed, stated_ideal, date.partner_ad
-		)
-		happiness_scores = self.get_dated_partners_vs_happiness()
-		print('happiness_scores:', happiness_scores)
-		current_happiness = happiness_scores[date.partner]
-		avg_happiness, std_happiness = 0, 0
-		if len(happiness_scores) > self.data_sanity_count:
-			avg_happiness, std_happiness = (
-				statistics.mean(happiness_scores.values()),
-				statistics.stdev(happiness_scores.values()),
-			)
-			avg_happiness, std_happiness = round(avg_happiness, 2), round(std_happiness, 2)
-		progress = (date.round - 1) / max(1, self.rounds - 1)
-		k_std_away = self.initial_k_std_away * (1 - progress)
-		print(
-			'current_happiness:',
-			current_happiness,
-			'date_again:',
-			avg_happiness,
-			'k_std_away:',
-			k_std_away,
-			'propose_again:',
-			avg_happiness + k_std_away * std_happiness,
-			'never_again:',
-			avg_happiness - 1.5 * std_happiness,
-			'Date History:',
-			self.dated_partner_history[date.partner],
-			'max_marriage_requests_per_person',
-			self.max_marriage_requests_per_person,
-			'max_date_requests_per_person',
-			self.max_date_requests_per_person,
-		)
-		date_again = (
-			current_happiness >= avg_happiness
-			and current_happiness > 0
-			and self.dated_partner_history[date.partner].date_requested_count
-			< self.max_date_requests_per_person
-		)
-		propose_again = (
-			date.date_number >= 2
-			and current_happiness >= (avg_happiness + k_std_away * std_happiness)
-			and current_happiness > 0
-			and self.dated_partner_history[date.partner].marriage_requested_count
-			< self.max_marriage_requests_per_person
-		)
-		never_again = (
-			current_happiness < (avg_happiness - 1.5 * std_happiness)
-			or self.dated_partner_history[date.partner].date_requested_count
-			>= self.max_date_requests_per_person
-			or self.dated_partner_history[date.partner].marriage_requested_count
-			>= self.max_marriage_requests_per_person
-		)
-		if self.exploration_mode:
-			date_again, propose_again, never_again = False, False, False
-		if never_again:
-			date_again, propose_again = False, False
-		self.dated_partner_history[date.partner].update_request_counts(date_again, propose_again)
-		print(
-			'date_again:',
-			date_again,
-			'propose_again:',
-			propose_again,
-			'never_again:',
-			never_again,
-			'\n\n',
-		)
-		return Decision(again=date_again, propose=propose_again, incompatible=never_again)
+		if (
+			match.score <= 0
+			and observed == match.first_profile
+			and date.rounds_left > 2
+			and len(self.available) > 2
+			and own_loss >= self.bonus
+		):
+			return Decision(incompatible=True)
+		return Decision(again=match.asked, propose=match.proposed)
 
-	def get_dated_partners_vs_happiness(self):
-		happiness_scores = dict()
-		for partner_id, partner_history in self.dated_partner_history.items():
-			partner_scores = list()
-			for partner_profile, partner_ideal in zip(
-				partner_history.profile_history, partner_history.ideal_history, strict=False
-			):
-				score = happiness(
-					self.bonus,
-					self.profile,
-					self.ideal,
-					partner_profile,
-					partner_ideal,
-					self.monotonic,
-				)
-				partner_scores.append(score)
-			happiness_scores[partner_id] = min(partner_scores)
-		return happiness_scores
-
-	def mark_partners_out_of_system(self, candidates):
-		available_partners = [x.index for x in candidates]
-		self.dated_partner_history = {
-			partner_id: partner
-			for partner_id, partner in self.dated_partner_history.items()
-			if partner_id in available_partners
-		}
-		return
+	def on_outcome(self, outcome: DateOutcome) -> None:
+		match = self.history[outcome.partner]
+		if outcome.partner_proposed:
+			match.offer_round = outcome.round
+			match.declined_proposals = 0
+		elif match.proposed:
+			match.declined_proposals += 1
+		if outcome.again:
+			match.declined_repeats = 0
+		elif match.asked and not outcome.married:
+			match.declined_repeats += 1
+			match.retry_round = outcome.round + min(4, match.declined_repeats + 1)
