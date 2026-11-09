@@ -310,7 +310,7 @@ def test_profile_and_history_navigation(screen):
 	view.select_at((view.history_area.x + 10, view.history_area.y + 10))
 	assert view.history_selected == 4
 	view.type_key(pygame.K_PAGEDOWN, '')
-	assert view.profile_offset == 8
+	assert view.profile_offset == 10
 	view.draw(screen)
 	view.select_person(1)
 	assert view.profile_offset == view.history_offset == 0
@@ -379,6 +379,50 @@ def test_summary_tab_lists_married_by_happiness(screen):
 	assert view.tab == 'summary'
 	view.select_at(view.tab_participant.center)
 	assert view.tab == 'participant'
+
+
+def test_summary_singles_and_group_averages(screen):
+	view = Visualizer(build(rounds=5))
+	view.jump_to(5)
+	view.tab = 'summary'
+	view.set_summary_mode('singles')
+	singles = view.singles_summary()
+	assert {person for person, *_ in singles} == set(view.engine.singles())
+	assert singles == sorted(singles, key=lambda row: (row[1], row[0]))
+	view.draw(screen)
+	view.type_key(pygame.K_m, 'm')
+	assert view.summary_mode == 'groups'
+	groups = view.group_summary()
+	assert groups
+	assert groups == sorted(groups, key=lambda row: (-row[4], row[0]))
+	by_label = {
+		group: (people, married, left, avg) for group, people, married, left, avg in groups
+	}
+	# GreedyPlayer -> 'g', RandomPlayer -> 'r' in the default build roster.
+	assert by_label['g'][0] == 10
+	assert by_label['r'][0] == 10
+	assert by_label['g'][1] + by_label['g'][2] == 10
+	assert by_label['r'][1] + by_label['r'][2] == 10
+	view.draw(screen)
+	view.select_at(view.summary_mode_rects['marriages'].center)
+	assert view.summary_mode == 'marriages'
+
+
+def test_profile_shows_all_ten_dimensions(screen):
+	view = Visualizer(build(dims=10))
+	assert view.engine.dims == 10
+	written = []
+	original = view.text
+
+	def capture(surface, value, *args, **kwargs):
+		written.append(str(value))
+		return original(surface, value, *args, **kwargs)
+
+	view.text = capture
+	view.draw(screen)
+	assert '0' in written and '9' in written
+	view.scroll_profile(1)
+	assert view.profile_offset == 0
 
 
 def test_profile_switches_from_date_to_true_spouse(screen):
