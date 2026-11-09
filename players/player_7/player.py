@@ -17,8 +17,11 @@ Copies recognise each other honestly: our ad's dimensions are a checksum of
 our true profile and ideal, which a date reveals. Only recognised copies go
 into the shared matching. Anyone else will not wait for a matching they do not
 compute, so we take them once they beat both our assigned partner and a
-patience bar: roughly the best we expect from the people we can still meet,
-judged from the people met so far. The bar falls to zero as the unmet people
+patience bar: what we expect to end up with if we hold out for the people we
+can still meet. The bar is reasoned dimension by dimension. Under the values
+we have seen, each dimension has an expected cost and a variance, and since
+dimensions are drawn independently these add up to the mean and spread of our
+happiness with a random partner. The bar falls to zero as the unmet people
 run out, so we stay picky early and never miss the end. We stop counting on
 anyone who snubs us twice, and we block outsiders who are hopeless for us so
 the engine stops spending our dates on them.
@@ -37,7 +40,7 @@ average ideal for them and that the value our ad asked for was nudged by 2.
 """
 
 import math
-import random
+from statistics import NormalDist
 
 from models.player import (
 	Advertisement,
@@ -53,6 +56,7 @@ from models.player import Player as BasePlayer
 from models.profile import Profile, decrement
 
 VALUES = range(11)
+NORMAL = NormalDist()
 
 # Pseudo-counts per value before any date: a broad bell around 5, so the first
 # ad-based estimates are sensible and real observations soon dominate.
@@ -72,12 +76,9 @@ GONE_AFTER = 3
 # Unanswered proposals or refused repeat dates before we stop counting on
 # someone outside our group: they keep dating us but will not marry us.
 SNUBS = 2
-# Share of the people we have yet to meet that we count as real chances when
-# deciding how picky to be with outsiders.
+# The chance that any one person we have yet to meet turns into a real option
+# for us, when deciding how picky to be with outsiders.
 CHANCE = 0.2
-# Imagined people drawn from the learned distribution, used as a prior for
-# what the market holds before we have dated much of it.
-IMAGINED = 5
 # A stated ideal within this distance of our own profile is flattery.
 MIRROR = 1
 # How far a flatterer may have nudged the value our ad asked for.
@@ -104,7 +105,6 @@ class Player7(BasePlayer):
 		super().__init__(snapshot, ctx)
 		self.counts = [list(PRIOR) for _ in range(self.dims)]
 		self.costs: tuple[list[float], list[float]] | None = None
-		self.imagined: list[float] | None = None
 		# What each person showed and said on every date with us.
 		self.shown: dict[int, list[Profile]] = {}
 		self.stated: dict[int, list[Profile]] = {}
@@ -286,42 +286,44 @@ class Player7(BasePlayer):
 					edges[y].discard(x)
 				edges[x] = set()
 
-	def _bar(self, rounds_left: int) -> float:
-		"""The happiness an outsider must offer us now: about the best we expect
-		from the people we can still meet, judged by the people met so far plus
-		a few imagined ones. It falls to zero as the unmet people run out."""
-		chances = CHANCE * min(self.unmet, max(0, rounds_left - ENDGAME))
-		if chances < 1:
-			return 0.0
-		seen = []
-		for who in self.shown:
-			if self._kin(who) or not self._trusted(who):
-				continue
-			ours, their = self._with_me(who)
-			if ours > 0 and their > 0:
-				seen.append(ours)
-		seen += self._imagined()
-		if not seen:
-			return 0.0
-		seen.sort()
-		q = 1 - 1 / (chances + 1)
-		return seen[min(len(seen) - 1, int(q * len(seen)))]
+	def _market(self) -> tuple[float, float]:
+		"""Mean and spread of our happiness with a random partner.
 
-	def _imagined(self) -> list[float]:
-		"""Our happiness with a few people drawn from the learned distribution,
-		kept only when both sides would be positive."""
-		if self.imagined is None or self.costs is None:
-			self._expected_costs()
-			rng = random.Random(self.index)
-			self.imagined = []
-			for _ in range(IMAGINED):
-				profile = [rng.choices(VALUES, row)[0] for row in self.counts]
-				ideal = tuple(rng.choices(VALUES, row)[0] for row in self.counts)
-				ours = sum(self._cost(d, self.ideal[d], profile[d]) for d in range(self.dims))
-				their = decrement(ideal, self.profile, self.monotonic)
-				if self.bonus - ours - their / 2 > 0 and self.bonus - their - ours / 2 > 0:
-					self.imagined.append(self.bonus - ours - their / 2)
-		return list(self.imagined)
+		Each dimension is reasoned about on its own. Under the values seen so
+		far it has an expected cost and a variance, once for what we would lose
+		on it and once for the half of a random partner's loss that we share.
+		Dimensions are drawn independently, so the totals are just the sums."""
+		mean, variance = self.bonus, 0.0
+		for dim, row in enumerate(self.counts):
+			total = sum(row)
+			ours = [self._cost(dim, self.ideal[dim], v) for v in VALUES]
+			theirs = [self._cost(dim, w, self.profile[dim]) / 2 for w in VALUES]
+			for costs in (ours, theirs):
+				first = sum(n * c for n, c in zip(row, costs, strict=True)) / total
+				second = sum(n * c * c for n, c in zip(row, costs, strict=True)) / total
+				mean -= first
+				variance += second - first * first
+		return mean, math.sqrt(variance)
+
+	def _bar(self, rounds_left: int) -> float:
+		"""The happiness an outsider must offer us now: what we expect to end up
+		with if we hold out for the people we can still meet.
+
+		Holding out with nobody left to meet is worth zero. Each further person
+		is a random partner who turns into a real option with probability
+		CHANCE, and raises the bar by the amount they are expected to beat it.
+		It falls to zero as the unmet people run out."""
+		mean, spread = self._market()
+		bar = 0.0
+		if spread <= 0:
+			return bar
+		for _ in range(min(self.unmet, max(0, rounds_left - ENDGAME))):
+			z = (mean - bar) / spread
+			gain = CHANCE * spread * (NORMAL.pdf(z) + z * NORMAL.cdf(z))
+			if gain < 0.01:
+				break
+			bar += gain
+		return bar
 
 	def _snubbed(self, who: int) -> bool:
 		if who in self.proposed_to_me or self._kin(who):
