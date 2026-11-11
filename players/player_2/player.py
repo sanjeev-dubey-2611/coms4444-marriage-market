@@ -2,6 +2,11 @@
 
 Defaults selected using mixed markets with N=50, B=150, T=250.
 All learned state is private to each instance.
+
+Three changes on top (search for "Change 1/2/3"):
+1. Both sides must be happy, judged from the ideal they tell us.
+2. When we are cornered (2 or fewer options left), new dates see a better us.
+3. Step aside for someone we met who needs this person more than we do.
 """
 
 import math
@@ -55,6 +60,9 @@ class StrategyConfig:
     max_shift: int = 2
     max_lie_dimensions: int = 2
     min_perceived_gain: float = 5.0
+
+    # Change 2: lie to new dates while we expect this many options or fewer (0 = never).
+    cornered: float = 2.0
 
 
 def similar(a: Profile, b: Profile, cutoff: float) -> bool:
@@ -127,6 +135,8 @@ class Player2(BasePlayer):
         self.personas: dict[int, Profile] = {}
         self.my_described: dict[int, Profile] = {}
         self.proposed_to_me: set[int] = set()
+        self.their: dict[int, float] = {}  # their happiness with us, as they see it
+        self.available: set[int] = set()  # singles we can date this round
         self.deceptions_started = 0
 
         # Last observable count; repeat-date contexts do not provide it.
@@ -226,8 +236,8 @@ class Player2(BasePlayer):
             for i, row in enumerate(self.preference_probs)
         ]
 
-        self.sample_scores = sorted(
-            self._score(
+        self.fakes = [
+            (
                 tuple(
                     self.rng.choices(VALUES, weights=row)[0]
                     for row in self.trait_probs
@@ -238,7 +248,45 @@ class Player2(BasePlayer):
                 ),
             )
             for _ in range(self.config.sample_size)
+        ]
+        self.sample_scores = sorted(self._score(t, i) for t, i in self.fakes)
+        self.p_me = self._p_both(self.profile, self.ideal)
+
+    def _p_both(self, profile: Profile, ideal: Profile) -> float:
+        # Share of the made-up people who would be happy with this person, and they with them.
+        ok = 0
+        for traits, wants in self.fakes:
+            a = decrement(ideal, traits, self.monotonic)
+            b = decrement(wants, profile, self.monotonic)
+            ok += self.bonus - a - b / 2 > 0 and self.bonus - b - a / 2 > 0
+        return ok / len(self.fakes)
+
+    def _my_options(self) -> float:
+        # Singles we met who work both ways, plus the expected number among those we have not met.
+        met = sum(
+            1
+            for i in self.available
+            if i in self.estimates
+            and self.estimates[i] - self._penalty(i) > 0
+            and self.their.get(i, 0) > 0
         )
+        unmet = sum(1 for i in self.available if i not in self.estimates)
+        return met + unmet * self.p_me
+
+    def _someone_needs_more(self, who: int) -> bool:
+        # Change 3: a single we met (and do not suspect) who would work with `who` both ways,
+        # but has fewer options than we do.
+        tw, iw = self.traits.reports[who], self.preferences.reports[who]
+        for k, tk in self.traits.reports.items():
+            if k == who or k not in self.available or self.suspicion.get(k, 0.0) > 0:
+                continue
+            ik = self.preferences.reports[k]
+            a = decrement(ik, tw, self.monotonic)
+            b = decrement(iw, tk, self.monotonic)
+            both_happy = self.bonus - a - b / 2 > 0 and self.bonus - b - a / 2 > 0
+            if both_happy and self._p_both(tk, ik) < self.p_me:
+                return True
+        return False
 
     def _ad_score(self, ad: Advertisement) -> float:
         mine = (
@@ -382,6 +430,7 @@ class Player2(BasePlayer):
         turn: RoundContext,
     ) -> list[int]:
         self.singles = turn.singles
+        self.available = {c.index for c in candidates}
         self._update_phase(turn.round)
 
         ranked = sorted(
@@ -425,6 +474,17 @@ class Player2(BasePlayer):
 
         persona = list(self.profile)
         c = self.config
+
+        # Change 2: cornered, so nothing to lose (single and unhappy score the same).
+        if c.cornered and date.date_number == 1 and self._my_options() <= c.cornered:
+            for dim in range(self.monotonic):
+                if dim != self.ad.own_dim:  # more is never worse here; never contradict our ad
+                    persona[dim] = 10
+            dim = date.partner_ad.seek_dim  # the trait their ad asks for: up to 2 steps closer
+            if dim >= self.monotonic and dim != self.ad.own_dim:
+                persona[dim] += max(-2, min(2, date.partner_ad.seek_value - self.profile[dim]))
+            self.personas[date.partner] = tuple(persona)
+            return self.personas[date.partner]
 
         if (
             c.deception_enabled
@@ -517,10 +577,26 @@ class Player2(BasePlayer):
             date.partner, date.partner_ad
         )
 
-        if score <= 0 or self.observing:
+        # Change 1: they must be happy too (from their stated ideal and what we showed them).
+        shown = self.personas.get(date.partner, self.profile)
+        self.their[date.partner] = (
+            self.bonus
+            - decrement(stated_ideal, shown, self.monotonic)
+            - 0.5 * decrement(self.ideal, observed, self.monotonic)
+        )
+        proposed = date.partner in self.proposed_to_me
+        if score <= 0 or (self.their[date.partner] <= 0 and not proposed):
+            return Decision(incompatible=True)  # never again, so they stop using our rounds
+        if proposed:  # they already asked us, and we are happy: say yes
+            return Decision(again=True, propose=date.date_number >= 2)
+
+        if self.observing:
             return Decision()
 
         if score >= self._threshold(date.rounds_left):
+            # Change 3: leave this person to someone we met who needs them more.
+            if self._someone_needs_more(date.partner):
+                return Decision()
             return Decision(
                 again=True,
                 propose=date.date_number >= 2,
