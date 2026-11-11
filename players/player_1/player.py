@@ -28,7 +28,9 @@ MIN_TRUSTED_OPTIONS = 2
 LIE_TOLERANCE_SHARE = 0.1
 LIE_TOLERANCE_ENDGAME_SHARE = 0.2
 # Propose only if this partner is within this share of the bonus of our best other option.
-BEST_SLACK_SHARE = 0.1
+BEST_SLACK_SHARE = 0.05
+# Incoming interest modestly lowers our reservation bar.
+WILLING_DISCOUNT_SHARE = 0.10
 # A proposal from them counts as a signal for this many rounds.
 WILLING_ROUNDS = 2
 # Stop counting someone as an option after this many ignored proposals.
@@ -96,20 +98,40 @@ class Player1(BasePlayer):
 		good = [
 			i for i in known if self.scores[i][0] >= bar and self._eligible(i, relaxed, endgame)
 		]
+		# Candidates we have never dated.
 		fresh = sorted(
 			(c for c in candidates if c.index not in self.reports),
 			key=lambda c: (self._ad_cost(c.ad), c.index),
 		)
-		chosen = good + [c.index for c in fresh]
-		# Weaker known partners are a fallback once strangers run out or time does.
+
+		# Dynamically determine the exploration allocation.
+		explore_fraction = self._exploration_fraction(good, bar, turn.rounds_left)
+
+		explore_slots = min(self.list_limit, int(self.list_limit * explore_fraction + 0.999))
+		repeat_slots = self.list_limit - explore_slots
+
+		# Allocate slots between known and fresh candidates.
+		chosen = good[:repeat_slots] + [c.index for c in fresh[:explore_slots]]
+
+		# Fill unused slots if either category has too few candidates.
+		remaining = self.list_limit - len(chosen)
+
+		if remaining > 0:
+			leftovers = good[repeat_slots:] + [c.index for c in fresh[explore_slots:]]
+			chosen.extend(leftovers[:remaining])
+
+		# Preserve the original weaker-known-candidate fallback.
 		if endgame or not fresh:
-			chosen += [
+			weaker_known = [
 				i
 				for i in known
 				if i not in good
 				and self.scores[i][0] > floor
 				and self._eligible(i, relaxed, endgame)
 			]
+			remaining = self.list_limit - len(chosen)
+			chosen.extend(weaker_known[:remaining])
+
 		return chosen[: self.list_limit]
 
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
@@ -141,11 +163,20 @@ class Player1(BasePlayer):
 		willing = date.round - self.proposed_to_me.get(partner, -100) <= WILLING_ROUNDS
 		best_other = self._best_other(partner, relaxed, endgame)
 
-		if endgame or willing:
+		if endgame:
 			want = eligible and score > floor
+		elif willing:
+			adjusted_bar = max(
+				floor,
+				bar - WILLING_DISCOUNT_SHARE * self.bonus,
+			)
+			want = (
+				eligible
+				and score >= adjusted_bar
+				and score >= best_other - BEST_SLACK_SHARE * self.bonus
+			)
 		else:
 			want = eligible and score >= bar and score >= best_other - BEST_SLACK_SHARE * self.bonus
-
 		propose = want and date.date_number >= 2
 		if propose:
 			self.proposed_to.add(partner)
@@ -258,14 +289,17 @@ class Player1(BasePlayer):
 	def _relaxed(self, rounds_left: int, bar: float) -> bool:
 		if rounds_left <= (1 - RELAX_FRACTION) * self.rounds:
 			return True
+
 		trusted = sum(
 			1
 			for i, (score, _) in self.scores.items()
 			if i in self.available
 			and i not in self.blocked
+			and not self._unresponsive(i)
 			and score >= bar
 			and self._trusted(i, False)
 		)
+
 		return trusted < MIN_TRUSTED_OPTIONS
 
 	def _unresponsive(self, partner: int) -> bool:
@@ -307,3 +341,31 @@ class Player1(BasePlayer):
 		if dim < self.monotonic and gap <= 0:
 			return 0
 		return gap * gap
+
+	def _exploration_fraction(
+		self,
+		good: list[int],
+		bar: float,
+		rounds_left: int,
+	) -> float:
+		"""Allocate exploration slots based on known-match quality and opportunities."""
+
+		time_remaining = max(
+			0.0,
+			min(1.0, rounds_left / max(1, self.rounds)),
+		)
+
+		if good:
+			best_score = max(self.scores[i][0] for i in good)
+			quality = max(
+				0.0,
+				min(1.0, (best_score - bar) / max(1, self.bonus)),
+			)
+		else:
+			quality = 0.0
+
+		opportunity = min(time_remaining, self.singles_left)
+
+		fraction = 0.10 + 0.55 * opportunity * (1.0 - quality)
+
+		return max(0.10, min(0.65, fraction))
