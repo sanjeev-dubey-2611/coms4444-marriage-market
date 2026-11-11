@@ -20,7 +20,6 @@ from models.player import (
 from models.player import Player as BasePlayer
 from models.profile import MAX_VALUE, Profile, decrement
 
-
 REGULAR_PROJECTION_LOW = 2
 REGULAR_PROJECTION_HIGH = 8
 
@@ -60,8 +59,6 @@ ENDGAME_ROUNDS = 3
 MIRROR_PRIOR_FRACTION = 0.25
 
 
-
-
 @dataclass
 class DateRecord:
 	"""One date with a partner, from our side."""
@@ -83,7 +80,6 @@ class PlayerProfile:
 	stated_ideal: Profile | None = None
 	is_untruthful: bool = False
 	expected_score: float | None = None
-
 
 	last_informative_mine: float | None = None
 	last_informative_theirs: float | None = None
@@ -108,7 +104,6 @@ class Player4(BasePlayer):
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
 		self.player_profiles: dict[int, PlayerProfile] = {}
-
 
 		self.first_date_scores: list[float] = []
 
@@ -158,8 +153,6 @@ class Player4(BasePlayer):
 		ramp_progress = self._ramp_progress(round_number)
 		scores = self.first_date_scores
 		if len(scores) < MIN_SCORES_FOR_QUANTILE:
-
-
 			fraction = FALLBACK_THRESHOLD_FRACTION * min(1.0, self.rounds / FULL_FALLBACK_ROUNDS)
 			value = fraction * (1 - ramp_progress) * self.bonus
 		else:
@@ -195,8 +188,6 @@ class Player4(BasePlayer):
 
 		mine_from_own = False
 		if tuple(observed) == tuple(self.ideal):
-
-
 			if partner.last_informative_mine is not None:
 				mine = partner.last_informative_mine
 				mine_from_own = True
@@ -229,8 +220,6 @@ class Player4(BasePlayer):
 			partner.last_informative_theirs = float(theirs)
 		total_penalty = mine + theirs / 2
 		if partner.is_untruthful and not (mine_from_own and theirs_from_own):
-
-
 			total_penalty *= UNTRUTHFUL_PENALTY_MULTIPLIER
 		return self.bonus - total_penalty
 
@@ -263,7 +252,6 @@ class Player4(BasePlayer):
 		seek_dim = max(range(self.dims), key=seek_leniency)
 		return Advertisement(
 			own_dim=own_dim,
-
 			own_value=self._mask_value(own_dim, self.profile[own_dim]),
 			seek_dim=seek_dim,
 			seek_value=self.ideal[seek_dim],
@@ -283,12 +271,9 @@ class Player4(BasePlayer):
 			if not partner.has_dated:
 				never_dated.append(partner)
 			elif partner.expected_score >= threshold or partner.accept_next_proposal_chance:
-
 				promising_dated.append(partner)
 			elif partner.expected_score <= 0 and candidate.dates < 2:
-
 				second_chance.append(partner)
-
 
 		promising_dated.sort(key=lambda partner: -partner.expected_score)
 		second_chance.sort(key=lambda partner: -partner.expected_score)
@@ -296,7 +281,6 @@ class Player4(BasePlayer):
 		never_dated.sort(key=lambda partner: self._ad_penalty(partner.advertisement))
 
 		if turn.rounds_left <= ENDGAME_ROUNDS:
-
 			ranked = [partner.index for partner in promising_dated]
 		else:
 			ranked = [partner.index for partner in promising_dated + second_chance + never_dated]
@@ -326,14 +310,12 @@ class Player4(BasePlayer):
 		if date.date_number == 1:
 			insort(self.first_date_scores, partner.expected_score)
 
-
 		if partner.expected_score <= 0:
 			if date.date_number >= 2:
 				return Decision(incompatible=True)
 			return Decision()
 
 		threshold = self._threshold_score(date.round)
-
 
 		safety = (
 			SAFETY_MARGIN_FRACTION
@@ -347,21 +329,20 @@ class Player4(BasePlayer):
 
 		may_ask_again = not partner.is_in_cooldown(date.round)
 
-
 		if partner.accept_next_proposal_chance:
 			shortfall = threshold - partner.expected_score
 			if shortfall > ACCEPT_PROPOSAL_MARGIN_FRACTION * self.bonus:
 				partner.accept_next_proposal_chance = False
 
-
-		if can_propose and partner.expected_score >= floor and (
-			clears_with_safety or partner.accept_next_proposal_chance
+		if (
+			can_propose
+			and partner.expected_score >= floor
+			and (clears_with_safety or partner.accept_next_proposal_chance)
 		):
 			date_record.we_proposed = True
 			return Decision(again=may_ask_again, propose=True)
 		if clears_threshold:
 			return Decision(again=True)
-
 
 		return Decision()
 
@@ -378,7 +359,6 @@ class Player4(BasePlayer):
 			if partner.failed_proposals_in_a_row >= FAILED_PROPOSALS_BEFORE_COOLDOWN:
 				partner.cooldown_last_round = outcome.round + self.COOLDOWN_ROUNDS
 				partner.failed_proposals_in_a_row = 0
-
 
 		if outcome.partner_proposed and not date_record.we_proposed:
 			shortfall = self._threshold_score(outcome.round) - date_record.expected_score
