@@ -1,0 +1,16 @@
+{
+  "name": "distribution_comparison",
+  "description": "Same market, three populations. A uniform population spreads people across the whole 0-10 range, a normal one bunches them in the middle, and the mixed default does both. Narrower populations make random matches cheaper, which changes how picky it pays to be.",
+  "defaults": {
+    "players": [["g", 10], ["r", 10]],
+    "rounds": 100,
+    "bonus": 100,
+    "dims": 5,
+    "monotonic": 2,
+    "timeout": 0
+  },
+  "seeds": [1, 2, 3, 4, 5],
+  "grid": {
+    "distribution": ["uniform", "normal", "mixed"]
+  }
+}

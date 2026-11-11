@@ -43,12 +43,24 @@ class Player6(BasePlayer):
 	private to this instance.
 	"""
 
-	EXPLORE_FRACTION = 0.30
-	EARLY_EXCEPTION_RATIO = 0.65  # score >= 65% of bonus
-	PRIOR_STRENGTH = 3.0
-	EARLY_CONFIDENCE = 0.72
+	# Defaults adopted from the robust_tuning sweep (1000 training markets,
+	# validated on 1000 fresh ones): +2.57 pts positive rate vs the previous
+	# defaults (95% CI +1.88 to +3.25), mean happiness -2.28.
+	EXPLORE_FRACTION = 0.15
+	EARLY_EXCEPTION_RATIO = 0.35
+	PRIOR_STRENGTH = 1.0
+	EARLY_CONFIDENCE = 0.5
 	END_MARGIN = 0.01
-	ONE_SIDED_LIMIT = 3
+	ONE_SIDED_LIMIT = 5
+	REFERENCE_FLOOR_RATIO = 0.2
+	DECAY_EXPONENT = 2.0
+	AD_WEIGHT = 0.25
+	DISCOVERY_BONUS_RATIO = 0.0
+	# Honesty toggles. The sweep found honest ads slightly better than the +2
+	# exaggeration, and doubting everyone's claims much worse (-8.5 pts).
+	LIE = False  # Exaggerate our advertised monotonic value by +2.
+	ASSUME_LIES = False  # Dock LIE_DISCOUNT from others' monotonic claims.
+	LIE_DISCOUNT = 2
 
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
@@ -79,9 +91,16 @@ class Player6(BasePlayer):
 			difference = max(0, difference)
 		return difference * difference
 
+	def _believed(self, dim: int, value: int) -> int:
+		"""What we believe a claimed trait value really is."""
+		if self.ASSUME_LIES and dim < self.monotonic:
+			return max(0, value - self.LIE_DISCOUNT)
+		return value
+
 	def _penalty(self, observed: Profile, desired: Profile) -> float:
+		believed = tuple(self._believed(dim, value) for dim, value in enumerate(observed))
 		return float(
-			decrement(self.ideal, observed, self.monotonic)
+			decrement(self.ideal, believed, self.monotonic)
 			+ 0.5 * decrement(desired, self.profile, self.monotonic)
 		)
 
@@ -100,7 +119,9 @@ class Player6(BasePlayer):
 		ads = self.ad_desires[dim] if desire else self.ad_traits[dim]
 		prior = self._prior(dim)
 		# Full-date observations get greater weight than advertised claims.
-		weights = [direct[v] + 0.25 * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)]
+		weights = [
+			direct[v] + self.AD_WEIGHT * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)
+		]
 		total = sum(weights)
 		return [w / total for w in weights]
 
@@ -171,7 +192,7 @@ class Player6(BasePlayer):
 		# The sample champion is the secretary-problem reference value.
 		reference = max(
 			self.best_sample if math.isfinite(self.best_sample) else 0.0,
-			0.35 * self.bonus,
+			self.REFERENCE_FLOOR_RATIO * self.bonus,
 		)
 
 		if self._exploring(round_number):
@@ -185,7 +206,7 @@ class Player6(BasePlayer):
 		# positive matches as potential partners disappear.
 		return max(
 			self.END_MARGIN,
-			reference * (1.0 - urgency) ** 1.4,
+			reference * (1.0 - urgency) ** self.DECAY_EXPONENT,
 		)
 
 	def _refresh_denied(self, round_number: int, singles: int) -> None:
@@ -211,8 +232,9 @@ class Player6(BasePlayer):
 
 		total = sum(expected_ours) + 0.5 * sum(expected_theirs)
 		ad = candidate.ad
+		own_value = self._believed(ad.own_dim, ad.own_value)
 		total += (
-			self._gap(ad.own_dim, self.ideal[ad.own_dim], ad.own_value) - expected_ours[ad.own_dim]
+			self._gap(ad.own_dim, self.ideal[ad.own_dim], own_value) - expected_ours[ad.own_dim]
 		)
 		total += 0.5 * (
 			self._gap(ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim])
@@ -221,13 +243,13 @@ class Player6(BasePlayer):
 		return self.bonus - total
 
 	def advertise(self) -> Advertisement:
-		# The one permitted +2 exaggeration is applied only here, at startup.
-		# All date projections and stated ideals remain truthful.
+		# With LIE, the one +2 exaggeration is applied only here, at startup.
+		# All date projections and stated ideals remain truthful either way.
 		showable = range(self.monotonic) if self.monotonic else range(self.dims)
 		own = max(showable, key=lambda dim: self.profile[dim])
 		value = self.profile[own]
 
-		if own < self.monotonic:
+		if self.LIE and own < self.monotonic:
 			value = min(10, value + 2)
 
 		# Pick the dimension with the largest expected cost if unmet.
@@ -281,7 +303,7 @@ class Player6(BasePlayer):
 
 				# During discovery, seek distinct people rather than re-dates.
 				if exploring:
-					value += 0.10 * max(1.0, self.bonus)
+					value += self.DISCOVERY_BONUS_RATIO * max(1.0, self.bonus)
 
 				# Unknown ads are uncertain; do not treat forecasts as fact.
 				value -= (1 - self.EARLY_CONFIDENCE) * max(0.0, value)
