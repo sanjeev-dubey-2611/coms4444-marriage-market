@@ -1,6 +1,5 @@
 """Group 10's greedy strategy with an optimistic projected profile."""
 
-import numpy as np
 
 from models.player import (
 	Advertisement,
@@ -109,11 +108,10 @@ class Player10(BasePlayer):
 		# 	i = self.dated.index(date.partner)
 		# 	_prev_observed = self.samples[i * 2]
 		# 	_prev_ideal = self.samples[i * 2 + 1]
-			# @TODO: We can maybe do something if they've changed their profile
+		# @TODO: We can maybe do something if they've changed their profile
 
 		if estimate <= 0:
 			return Decision(incompatible=True)
-
 
 		# Find average person remaining and calculate their estimate. We want to propose if it is better than mean.
 		# samples = np.array(self.samples)
