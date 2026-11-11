@@ -101,7 +101,7 @@ class PlayerProfile:
 
 
 class Player4(BasePlayer):
-	"""Final revised Player 4: patient bar, safety margin, and a hard floor."""
+	"""Pre-final Player 4: patient bar, safety margin, and a hard floor."""
 
 	COOLDOWN_ROUNDS = 5
 
