@@ -839,3 +839,629 @@ class Player3WithIncompatible(Player3):
 
 class Player3LieFirstMono(Player3):
 	LIE_MODE = 'first_mono'
+
+
+"""Independent research additions. Appended to a preserved Group 3 source only.
+
+Population evidence is an individual's public first-date reports, counted once.
+No imports, opponent identification, hidden data, or external dependencies here.
+"""
+
+_BaselinePlayer3 = Player3
+
+
+class ResearchPolicy:
+	EXPECTED_ADS = False
+	UNIFIED_LIST = False
+	SHORTLIST = None
+	QUALITY = False
+	QUALITY_STRENGTH = 0.5
+	AD_POLICY = 'baseline'
+	FIRST_IDEAL = False
+	FIX_TRUST = False
+	RECIPROCITY = False
+	POPULATION = True
+
+	def __init__(self, snapshot, ctx):
+		super().__init__(snapshot, ctx)
+		self._population = [[1.0] * 11 for _ in range(self.dims)]
+		self._population_seen = set()
+		self._loss_cache = None
+		self._round_now = 1
+
+	def _population_loss(self, dim, fixed, ideal_random):
+		row = self._population[dim]
+		return sum(
+			w * (self._gap(dim, x, fixed) if ideal_random else self._gap(dim, fixed, x))
+			for x, w in enumerate(row)
+		) / sum(row)
+
+	def _prior_losses(self):
+		if self._loss_cache is None:
+			self._loss_cache = (
+				[self._population_loss(i, self.ideal[i], False) for i in range(self.dims)],
+				[self._population_loss(i, self.profile[i], True) for i in range(self.dims)],
+			)
+		return self._loss_cache
+
+	def _ad_utilities(self, ad):
+		mine, theirs = self._prior_losses()
+		a = (
+			sum(mine)
+			- mine[ad.own_dim]
+			+ self._gap(ad.own_dim, self.ideal[ad.own_dim], ad.own_value)
+		)
+		b = (
+			sum(theirs)
+			- theirs[ad.seek_dim]
+			+ self._gap(ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim])
+		)
+		return self.bonus - a - b / 2, self.bonus - b - a / 2
+
+	def _ad_cost(self, ad):
+		if not self.EXPECTED_ADS:
+			return super()._ad_cost(ad)
+		ours, theirs = self._ad_utilities(ad)
+		return -ours + (max(0.0, -theirs) if self.RECIPROCITY else 0.0)
+
+	def advertise(self):
+		ad = super().advertise()
+		if self.AD_POLICY == 'baseline' or ad.own_dim >= self.monotonic:
+			return ad
+		v = self.profile[ad.own_dim]
+		if self.AD_POLICY == 'honest':
+			shift = 0
+		elif self.AD_POLICY == 'budget':
+			# Bound the maximum extra squared shortfall hidden by the lie.
+			budget = max(0.0, self.bonus) / (4 * self.dims)
+			shift = max(
+				(s for s in range(4) if (10 - v) ** 2 - max(0, 10 - v - s) ** 2 <= budget),
+				default=0,
+			)
+		elif self.AD_POLICY == 'selective':
+			# Weak advertised traits incur more harm for the same exaggeration.
+			shift = 2 if v >= 7 else (1 if v >= 4 and self.bonus >= 10 * self.dims else 0)
+		else:
+			shift = 1
+		self._ad = Advertisement(ad.own_dim, min(10, v + shift), ad.seek_dim, ad.seek_value)
+		return self._ad
+
+	def choose_dates(self, candidates, turn):
+		self._round_now = turn.round
+		self._last_singles = turn.singles
+		if not self.UNIFIED_LIST:
+			chosen = super().choose_dates(candidates, turn)
+			if self.SHORTLIST is not None:
+				cap = self.SHORTLIST if turn.rounds_left > 4 else self.CANDIDATE_CAP
+				chosen = chosen[:cap]
+			return chosen
+		ranked = []
+		for c in candidates:
+			if c.index in self._est:
+				score = self._est[c.index]
+				if score <= 0:
+					continue
+				state = self._partner(c.index)
+				if (
+					state.proposals_to >= self.STOP_AFTER_OFFERS
+					and c.index not in self._proposed_to_me
+				):
+					continue
+				# An observed proposal makes this a one-date rather than two-date opportunity.
+				if c.index in self._proposed_to_me:
+					score += max(0.0, self.bonus - score) / 4
+			else:
+				score, theirs = self._ad_utilities(c.ad)
+				if self.RECIPROCITY:
+					score -= max(0.0, -theirs)
+			ranked.append((score, -c.index, c.index))
+		ranked.sort(reverse=True)
+		cap = self.SHORTLIST or self.CANDIDATE_CAP
+		if turn.rounds_left <= 4:
+			cap = self.CANDIDATE_CAP
+		if self.list_limit is not None:
+			cap = min(cap, self.list_limit)
+		return [v[2] for v in ranked[:cap]]
+
+	def _quality_bar(self, date):
+		if date.rounds_left <= 3 or self._last_singles <= 4:
+			return 0.0
+		mine, theirs = self._prior_losses()
+		prior = self.bonus - sum(mine) - sum(theirs) / 2
+		values = list(self._est.values())
+		if values:
+			reference = (prior * 4 + sum(values)) / (4 + len(values))
+			variance = sum((x - reference) ** 2 for x in values) / len(values)
+		else:
+			reference, variance = prior, (self.bonus / 4) ** 2
+		aspiration = max(0.0, reference + self.QUALITY_STRENGTH * math.sqrt(variance))
+		breadth = min(1.0, self._last_singles / max(2, self.people))
+		horizon = min(1.0, (date.rounds_left - 2) / max(4.0, self.rounds / 4))
+		return aspiration * math.sqrt(breadth) * horizon
+
+	def decide(self, date, observed, stated_ideal):
+		self._round_now = date.round
+		if self.POPULATION and date.partner not in self._population_seen:
+			self._population_seen.add(date.partner)
+			for i in range(self.dims):
+				self._population[i][observed[i]] += 1
+				self._population[i][stated_ideal[i]] += 1
+			self._loss_cache = None
+		state = self._partner(date.partner)
+		previous_proposals = state.proposals_to
+		if self.FIX_TRUST:
+			# The old core appends the current observation before its trust check.
+			# Assess history before that append, using only previously seen reports.
+			if state.observations and observed != state.observations[-1]:
+				state.trust = max(0.15, state.trust * 0.65)
+			elif (
+				not state.observations
+				and abs(observed[date.partner_ad.own_dim] - date.partner_ad.own_value) > 1
+			):
+				state.trust = max(0.15, state.trust * 0.55)
+		if self.FIRST_IDEAL and state.stated_ideals:
+			# Preference relaxation does not change the underlying private scoring profile.
+			first = state.stated_ideals[0]
+			if decrement(first, self.profile, self.monotonic) > decrement(
+				stated_ideal, self.profile, self.monotonic
+			):
+				stated_ideal = first
+		decision = super().decide(date, observed, stated_ideal)
+		if self.QUALITY and not decision.incompatible:
+			est = min(self._est.get(date.partner, 0.0), self._estimate(observed, stated_ideal))
+			if est <= self._quality_bar(date):
+				state.proposals_to = previous_proposals
+				return Decision()
+		return decision
+
+
+class Player3(ResearchPolicy, _BaselinePlayer3):
+	pass
+
+
+"""Second-stage hypotheses: coordinate quality rejection with future search."""
+
+
+class Refinement:
+	FILTER_REJECTED = False
+	OFFER_DISCOUNT = False
+	LIVE_RESERVATION = False
+	AD_INFORMATION = False
+	COOLDOWN = False
+
+	def __init__(self, snapshot, ctx):
+		super().__init__(snapshot, ctx)
+		self._recent_rejection = {}
+		self._seen_round = {}
+		self._previous_singles = ctx.people
+		self._previous_round = 0
+		self._market_survival = 1.0
+
+	def advertise(self):
+		ad = super().advertise()
+		if not self.AD_INFORMATION:
+			return ad
+
+		# Select disclosed dimensions by variance of their actual quadratic loss.
+		def variance(dim, fixed, ideal_random):
+			vals = [
+				self._gap(dim, x, fixed) if ideal_random else self._gap(dim, fixed, x)
+				for x in range(11)
+			]
+			mean = sum(vals) / 11
+			return sum((x - mean) ** 2 for x in vals) / 11
+
+		own = max(range(self.dims), key=lambda i: variance(i, self.profile[i], True))
+		seek = max(range(self.dims), key=lambda i: variance(i, self.ideal[i], False))
+		self._ad = Advertisement(own, self.profile[own], seek, self.ideal[seek])
+		return self._ad
+
+	def _quality_bar(self, date):
+		bar = super()._quality_bar(date)
+		if self.LIVE_RESERVATION:
+			# Survival over the two rounds needed to sample and marry an alternative.
+			bar *= self._market_survival**2
+		if self.OFFER_DISCOUNT and date.partner in self._proposed_to_me:
+			bar *= 0.8
+		return bar
+
+	def choose_dates(self, candidates, turn):
+		gap = turn.round - self._previous_round
+		if gap > 0 and self._previous_singles > 2:
+			survival = (turn.singles / self._previous_singles) ** (1 / gap)
+			self._market_survival = max(0.25, min(1.0, survival))
+		self._previous_round, self._previous_singles = turn.round, turn.singles
+		self._last_singles = turn.singles
+		if self.FILTER_REJECTED and turn.rounds_left > 3 and turn.singles > 4:
+			bar = self._quality_bar(
+				DateContext(turn.round, turn.rounds_left, -1, self._ad, 1, False)
+			)
+			candidates = tuple(
+				c for c in candidates if c.index not in self._est or self._est[c.index] > bar
+			)
+		if self.COOLDOWN and turn.rounds_left > 4:
+			candidates = tuple(
+				c for c in candidates if turn.round - self._recent_rejection.get(c.index, -100) > 2
+			)
+		return super().choose_dates(candidates, turn)
+
+	def decide(self, date, observed, stated_ideal):
+		self._seen_round[date.partner] = date.round
+		decision = super().decide(date, observed, stated_ideal)
+		if not decision.again:
+			self._recent_rejection[date.partner] = date.round
+		return decision
+
+
+_StageOnePlayer3 = Player3
+
+
+class Player3(Refinement, _StageOnePlayer3):
+	pass
+
+	QUALITY = True
+	QUALITY_STRENGTH = 1.0
+	EXPECTED_ADS = True
+	UNIFIED_LIST = True
+	FILTER_REJECTED = True
+
+
+# Independently authored continuation of our frozen Group 3 policy.
+# Group 9's public-code study motivated separating fit from willingness and
+# considering remaining opportunities. No opponent implementation is used.
+
+_FrozenQuFilter = Player3
+
+
+class CoveragePolicy:
+	R2_DEPLETION = False
+	R2_OPPORTUNITY = False
+	R2_WILLINGNESS = False
+	R2_RETAIN = False
+	R2_REOPEN = False
+	R2_ATTAINABLE = False
+	R2_ENDGAME = False
+	R2_DISPERSION = False
+	R2_LOCAL_FILTER = False
+
+	def __init__(self, snapshot, ctx):
+		super().__init__(snapshot, ctx)
+		self._r2_first_scores = {}
+		self._r2_last_date = {}
+		self._r2_last_offer = {}
+		self._r2_received = {}
+		self._r2_eligible = {}
+		self._r2_offers = {}
+		self._r2_repeat_requests = 0
+		self._r2_repeat_successes = 0
+		self._r2_visible = ()
+		self._r2_decision = Decision()
+		self._r2_variance_cache = None
+
+	def _r2_singles(self, round_number):
+		elapsed = max(0, round_number - self._previous_round)
+		return 2 + max(0, self._last_singles - 2) * self._market_survival**elapsed
+
+	def _r2_prior_variance(self):
+		# Independent quadratic-loss variance. A constant marriage bonus shifts
+		# utility but cannot change its variance. The population is public reports.
+		if self._r2_variance_cache is None:
+			total = 0.0
+			for i, row in enumerate(self._population):
+				n = sum(row)
+				for fixed, reverse, weight in (
+					(self.ideal[i], False, 1),
+					(self.profile[i], True, 0.25),
+				):
+					losses = [
+						self._gap(i, x, fixed) if reverse else self._gap(i, fixed, x)
+						for x in range(11)
+					]
+					mean = sum(w * x for w, x in zip(row, losses)) / n  # noqa: B905 - equal lengths by construction
+					total += weight * sum(w * (x - mean) ** 2 for w, x in zip(row, losses)) / n  # noqa: B905 - equal lengths by construction
+			self._r2_variance_cache = total
+		return self._r2_variance_cache
+
+	def _r2_reciprocity(self, partner, theirs=None):
+		n = self._r2_eligible.get(partner, 0)
+		offers = self._r2_offers.get(partner, 0)
+		if partner in self._r2_received:
+			# Repeated offers give stronger evidence than an isolated old one.
+			age = max(0, self._round_now - self._r2_received[partner])
+			return (offers + 2) / (n + 3) / (1 + age / max(2, self.rounds / 4))
+		if theirs is None:
+			state = self._partners.get(partner)
+			if state and state.observations:
+				theirs = (
+					self.bonus
+					- decrement(state.stated_ideals[-1], self.profile, self.monotonic)
+					- decrement(self.ideal, state.observations[-1], self.monotonic) / 2
+				)
+		sigma = max(1.0, math.sqrt(self._r2_prior_variance()))
+		fit = 0.5 if theirs is None else 0.5 * (1 + math.erf(theirs / (sigma * math.sqrt(2))))
+		return fit / (1 + n - offers)
+
+	def _r2_continuation(self, date):
+		# Finite remaining two-date opportunities, with a zero payoff when a
+		# repeat/commitment fails. This is a public-data model, not oracle access.
+		left = max(0, date.rounds_left - 1)
+		count = max(0.0, self._r2_singles(date.round) - 2)
+		visible = [c for c in self._r2_visible if c.index != date.partner]
+		unseen = sum(c.index not in self._est for c in visible)
+		age = max(0, date.round - self._previous_round)
+		attempts = min(left // 2, int(min(count, unseen) * self._market_survival**age))
+		known = [
+			max(0.0, self._est.get(c.index, 0)) * self._r2_reciprocity(c.index)
+			for c in visible
+			if c.index in self._est
+		]
+		value = max(known, default=0.0) if left else 0.0
+		mine, theirs = self._prior_losses()
+		mean = self.bonus - sum(mine) - sum(theirs) / 2
+		sd = math.sqrt(self._r2_prior_variance())
+		values = list(self._r2_first_scores.values()) + [mean - sd, mean, mean, mean + sd]
+		repeat = (1 + self._r2_repeat_successes) / (2 + self._r2_repeat_requests)
+		offers = sum(self._r2_offers.values())
+		eligible = sum(self._r2_eligible.values())
+		commit = (1 + offers) / (2 + eligible)
+		for _ in range(attempts):
+			value += repeat * commit * sum(max(0.0, x - value) for x in values) / len(values)
+		return value
+
+	def _quality_bar(self, date):
+		bar = super()._quality_bar(date)
+		if self.R2_DISPERSION and date.rounds_left > 3 and self._last_singles > 4:
+			mine, theirs = self._prior_losses()
+			prior = self.bonus - sum(mine) - sum(theirs) / 2
+			values = list(self._est.values())
+			ref = (4 * prior + sum(values)) / (4 + len(values))
+			var = (4 * self._r2_prior_variance() + sum((v - ref) ** 2 for v in values)) / (
+				4 + len(values)
+			)
+			horizon = min(1.0, (date.rounds_left - 2) / max(4, self.rounds / 4))
+			bar = (
+				max(0, ref + math.sqrt(var))
+				* math.sqrt(min(1, self._last_singles / max(2, self.people)))
+				* horizon
+			)
+		if self.R2_DEPLETION and self._last_singles > 4:
+			forecast = self._r2_singles(date.round)
+			bar *= math.sqrt(forecast / self._last_singles)
+		if self.R2_OPPORTUNITY:
+			bar = min(bar, self._r2_continuation(date))
+		if self.R2_WILLINGNESS and date.partner in self._r2_received:
+			probability = self._r2_reciprocity(date.partner)
+			bar = min(bar, self._r2_continuation(date) / max(0.05, probability))
+		return bar
+
+	def choose_dates(self, candidates, turn):
+		self._round_now = turn.round
+		self._r2_visible = candidates
+		endgame = self.R2_ENDGAME and turn.rounds_left <= 3
+		if self.R2_ENDGAME and turn.rounds_left == 1:
+			candidates = tuple(c for c in candidates if c.dates and self._est.get(c.index, 0) > 0)
+		saved = {}
+		if self.R2_REOPEN or endgame:
+			for c in candidates:
+				state = self._partners.get(c.index)
+				if state and state.proposals_to >= self.STOP_AFTER_OFFERS:
+					delay = turn.round - self._r2_last_offer.get(c.index, turn.round)
+					if endgame or delay >= max(2, self.rounds // 10):
+						saved[c.index] = state.proposals_to
+						state.proposals_to = 0
+		try:
+			filtered = self.FILTER_REJECTED
+			if self.R2_LOCAL_FILTER:
+				gap = turn.round - self._previous_round
+				if gap > 0 and self._previous_singles > 2:
+					self._market_survival = max(
+						0.25, min(1.0, (turn.singles / self._previous_singles) ** (1 / gap))
+					)
+				self._previous_round, self._previous_singles = turn.round, turn.singles
+				self._last_singles = turn.singles
+				if filtered and turn.rounds_left > 3 and turn.singles > 4:
+					candidates = tuple(
+						c
+						for c in candidates
+						if c.index not in self._est
+						or self._est[c.index]
+						> self._quality_bar(
+							DateContext(
+								turn.round, turn.rounds_left, c.index, c.ad, c.dates + 1, False
+							)
+						)
+					)
+				# Our partner-specific filter already ran; avoid the inherited
+				# sentinel partner=-1 treating this opportunity as its own rival.
+				self.FILTER_REJECTED = False
+			try:
+				chosen = super().choose_dates(candidates, turn)
+			finally:
+				self.FILTER_REJECTED = filtered
+			if self.R2_ATTAINABLE:
+				# Rank by positive return times a public willingness estimate.
+				# Reproduce baseline eligibility, changing membership, not merely
+				# order (the simulator treats the shortlist as a set).
+				ranked = []
+				bar = self._quality_bar(
+					DateContext(turn.round, turn.rounds_left, -1, self._ad, 1, False)
+				)
+				for c in candidates:
+					if c.index in self._est:
+						h = self._est[c.index]
+						if h <= 0 or (turn.rounds_left > 3 and turn.singles > 4 and h <= bar):
+							continue
+						if (
+							self._partner(c.index).proposals_to >= self.STOP_AFTER_OFFERS
+							and c.index not in self._proposed_to_me
+						):
+							continue
+						probability = self._r2_reciprocity(c.index)
+						if c.index in self._proposed_to_me:
+							h += max(0.0, self.bonus - h) / 4
+					else:
+						h, theirs = self._ad_utilities(c.ad)
+						probability = self._r2_reciprocity(c.index, theirs)
+					ranked.append((h * probability, -c.index, c.index))
+				ranked.sort(reverse=True)
+				cap = (
+					min(self.CANDIDATE_CAP, self.list_limit)
+					if self.list_limit is not None
+					else self.CANDIDATE_CAP
+				)
+				chosen = [r[2] for r in ranked[:cap]]
+			return chosen
+		finally:
+			for i, value in saved.items():
+				self._partners[i].proposals_to = value
+
+	def decide(self, date, observed, stated_ideal):
+		if date.partner not in self._population_seen:
+			self._r2_variance_cache = None
+		decision = super().decide(date, observed, stated_ideal)
+		h = min(self._est.get(date.partner, 0), self._estimate(observed, stated_ideal))
+		self._r2_first_scores.setdefault(date.partner, h)
+		self._r2_last_date[date.partner] = date.round
+		if (
+			self.R2_RETAIN
+			and not decision.again
+			and not decision.incompatible
+			and date.rounds_left > 1
+			and h > 0
+		):
+			next_date = DateContext(
+				date.round + 1,
+				date.rounds_left - 1,
+				date.partner,
+				date.partner_ad,
+				date.date_number + 1,
+				True,
+			)
+			if (
+				h > self._quality_bar(next_date)
+				and self._partner(date.partner).proposals_to < self.STOP_AFTER_OFFERS
+			):
+				decision = Decision(again=True, propose=decision.propose)
+		if decision.propose:
+			self._r2_last_offer[date.partner] = date.round
+		self._r2_decision = decision
+		return decision
+
+	def on_outcome(self, outcome):
+		if outcome.date_number >= 2:
+			self._r2_eligible[outcome.partner] = self._r2_eligible.get(outcome.partner, 0) + 1
+			self._r2_offers[outcome.partner] = self._r2_offers.get(outcome.partner, 0) + int(
+				outcome.partner_proposed
+			)
+		if outcome.partner_proposed:
+			self._r2_received[outcome.partner] = outcome.round
+		if self._r2_decision.again and not outcome.married and outcome.round < self.rounds:
+			self._r2_repeat_requests += 1
+			self._r2_repeat_successes += int(outcome.again)
+		super().on_outcome(outcome)
+
+
+class Player3(CoveragePolicy, _FrozenQuFilter):
+	pass
+
+
+"""Independent date-loss calibration and exact-tie shortlist experiments.
+
+Only our Group 3 estimates and legal observations are used. The point-loss
+versus expected-loss distinction follows directly from the game's convex
+loss; this is not an opponent decoder or an opponent's implementation.
+"""
+
+_CalibrationBase = Player3
+
+
+class CalibrationPolicy:
+	CALIBRATED_LOSS = False
+	SHORTLIST_TIES = False
+
+	def __init__(self, snapshot, ctx):
+		super().__init__(snapshot, ctx)
+		self._calibration_pending = None
+		self._tie_opportunities = 0
+		self._tie_changes = 0
+
+	def _adjust_profiles(self, partner, partner_ad, observed, stated_ideal, our_projection):
+		adjusted = super()._adjust_profiles(
+			partner, partner_ad, observed, stated_ideal, our_projection
+		)
+		if not self.CALIBRATED_LOSS or adjusted[2] >= 1:
+			return adjusted
+		trust = adjusted[2]
+		mine, theirs = self._prior_losses()
+		# A mirrored ideal was already treated as uninformative by the core.
+		# Its expected loss is therefore the entire existing prior, rather
+		# than loss at the prior's mean or at the mirrored declaration.
+		ideal_trust = 0.0 if self._mirrored_ideal(stated_ideal, our_projection) else trust
+		expected_loss = sum(
+			trust * self._gap(i, self.ideal[i], observed[i])
+			+ (1 - trust) * mine[i]
+			+ 0.5
+			* (
+				ideal_trust * self._gap(i, stated_ideal[i], self.profile[i])
+				+ (1 - ideal_trust) * theirs[i]
+			)
+			for i in range(self.dims)
+		)
+		point_score = super()._estimate(*adjusted)
+		score = min(point_score, self.bonus - expected_loss)
+		# The core immediately evaluates exactly these adjusted profiles.
+		# Consume this once so subsequent raw guards retain their old meaning.
+		self._calibration_pending = (adjusted, score)
+		return adjusted
+
+	def _estimate(self, observed, stated_ideal, trust=1.0):
+		pending = self._calibration_pending
+		if pending is not None and (observed, stated_ideal, trust) == pending[0]:
+			self._calibration_pending = None
+			return pending[1]
+		return super()._estimate(observed, stated_ideal, trust)
+
+	def decide(self, date, observed, stated_ideal):
+		self._calibration_pending = None
+		try:
+			return super().decide(date, observed, stated_ideal)
+		finally:
+			self._calibration_pending = None
+
+	def choose_dates(self, candidates, turn):
+		chosen = list(super().choose_dates(candidates, turn))
+		if not self.SHORTLIST_TIES or not chosen:
+			return chosen
+		cap = self.SHORTLIST or self.CANDIDATE_CAP
+		if turn.rounds_left <= 4:
+			cap = self.CANDIDATE_CAP
+		if self.list_limit is not None:
+			cap = min(cap, self.list_limit)
+		if len(chosen) < cap:
+			return chosen
+		# The final baseline entry defines the actual cutoff. Known partners
+		# are anchors: only equal-scoring fresh entries can be exchanged.
+		fresh = {c.index: c for c in candidates if c.index not in self._est}
+		if chosen[-1] not in fresh:
+			return chosen
+		cutoff = self._ad_utilities(fresh[chosen[-1]].ad)[0]
+		tied = sorted(i for i, c in fresh.items() if self._ad_utilities(c.ad)[0] == cutoff)
+		positions = [j for j, i in enumerate(chosen) if i in tied]
+		if len(tied) <= len(positions):
+			return chosen
+		self._tie_opportunities += 1
+		replacements = self.rng.sample(tied, len(positions))
+		if {chosen[j] for j in positions} != set(replacements):
+			self._tie_changes += 1
+		for j, value in zip(positions, replacements):  # noqa: B905 - equal lengths by construction
+			chosen[j] = value
+		return chosen
+
+
+class Player3(CalibrationPolicy, _CalibrationBase):
+	pass
+
+
+class Player3(Player3):
+	R2_DISPERSION = True
+	R2_ENDGAME = True
