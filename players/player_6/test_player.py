@@ -59,6 +59,14 @@ def test_repeat_observations_replace_distribution_sample():
 	assert all(sum(row) == 1 for row in p.traits + p.desires)
 
 
+def test_tuned_early_exception_accepts_positive_match_below_old_cutoff():
+	p = make_player()
+	# Score = 100 - 25 - 0.5 * 25 = 62.5: clears 50%, below the old 65%.
+	decision = p.decide(date(1), (5, 7), (5, 7))
+	assert decision.again
+	assert not decision.propose
+
+
 def test_nonpositive_matches_never_proposed_to():
 	p = make_player()
 

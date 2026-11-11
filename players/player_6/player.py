@@ -44,11 +44,15 @@ class Player6(BasePlayer):
 	"""
 
 	EXPLORE_FRACTION = 0.30
-	EARLY_EXCEPTION_RATIO = 0.65  # score >= 65% of bonus
+	EARLY_EXCEPTION_RATIO = 0.50  # Tuned for positive happiness; see configs/player6_optimization_results.md.
 	PRIOR_STRENGTH = 3.0
 	EARLY_CONFIDENCE = 0.72
 	END_MARGIN = 0.01
 	ONE_SIDED_LIMIT = 3
+	REFERENCE_FLOOR_RATIO = 0.35
+	DECAY_EXPONENT = 1.4
+	AD_WEIGHT = 0.25
+	DISCOVERY_BONUS_RATIO = 0.10
 
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
@@ -100,7 +104,7 @@ class Player6(BasePlayer):
 		ads = self.ad_desires[dim] if desire else self.ad_traits[dim]
 		prior = self._prior(dim)
 		# Full-date observations get greater weight than advertised claims.
-		weights = [direct[v] + 0.25 * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)]
+		weights = [direct[v] + self.AD_WEIGHT * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)]
 		total = sum(weights)
 		return [w / total for w in weights]
 
@@ -171,7 +175,7 @@ class Player6(BasePlayer):
 		# The sample champion is the secretary-problem reference value.
 		reference = max(
 			self.best_sample if math.isfinite(self.best_sample) else 0.0,
-			0.35 * self.bonus,
+			self.REFERENCE_FLOOR_RATIO * self.bonus,
 		)
 
 		if self._exploring(round_number):
@@ -185,7 +189,7 @@ class Player6(BasePlayer):
 		# positive matches as potential partners disappear.
 		return max(
 			self.END_MARGIN,
-			reference * (1.0 - urgency) ** 1.4,
+			reference * (1.0 - urgency) ** self.DECAY_EXPONENT,
 		)
 
 	def _refresh_denied(self, round_number: int, singles: int) -> None:
@@ -281,7 +285,7 @@ class Player6(BasePlayer):
 
 				# During discovery, seek distinct people rather than re-dates.
 				if exploring:
-					value += 0.10 * max(1.0, self.bonus)
+					value += self.DISCOVERY_BONUS_RATIO * max(1.0, self.bonus)
 
 				# Unknown ads are uncertain; do not treat forecasts as fact.
 				value -= (1 - self.EARLY_CONFIDENCE) * max(0.0, value)

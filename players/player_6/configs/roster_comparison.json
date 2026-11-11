@@ -1,0 +1,18 @@
+{
+  "name": "roster_comparison",
+  "description": "Who you share the market with matters. An all-greedy market, an all-random market, and a half-and-half one, at the default parameters.",
+  "defaults": {
+    "rounds": 100,
+    "bonus": 100,
+    "dims": 5,
+    "monotonic": 2,
+    "distribution": "mixed",
+    "timeout": 0
+  },
+  "seeds": [1, 2, 3, 4, 5],
+  "cells": [
+    {"label": "greedy x20", "players": [["g", 20]]},
+    {"label": "random x20", "players": [["r", 20]]},
+    {"label": "greedy x10 + random x10", "players": [["g", 10], ["r", 10]]}
+  ]
+}
