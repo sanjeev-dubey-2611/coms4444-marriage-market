@@ -102,6 +102,8 @@ class Player5(Player):
 		bar = self._search_value(turn.rounds_left, len(fresh))
 		ready = [c for c in known if self._match_value(self.history[c.index], turn.round) >= bar]
 		choices = (ready or known) if ready or not fresh else fresh
+		if not fresh:
+			width = len(choices)
 		return [candidate.index for candidate in choices[:width][: self.list_limit]]
 
 	def _search_value(self, rounds_left: int, fresh: int) -> float:
@@ -121,9 +123,16 @@ class Player5(Player):
 		fit = 0.6 if match.partner_score > 0 else 0.3
 		return fit * match.score / (1 + match.declined_proposals)
 
-	def _reservation(self, date: DateContext) -> float:
-		# The last visible pool can be stale during a run of repeat dates.
+	def _search_reservation(self, date: DateContext) -> float:
+		if date.rounds_left <= 2:
+			return 0.0
 		fresh = sum(c.index != date.partner and c.index not in self.history for c in self.available)
+		return self._search_value(date.rounds_left - 1, fresh)
+
+	def _reservation(self, date: DateContext) -> float:
+		if date.rounds_left <= 1:
+			return 0.0
+		# The last visible pool can be stale during a run of repeat dates.
 		known = max(
 			(
 				self._match_value(match, date.round)
@@ -134,9 +143,7 @@ class Player5(Player):
 			),
 			default=0.0,
 		)
-		if date.rounds_left <= 1:
-			return 0.0
-		return max(known, self._search_value(date.rounds_left - 1, fresh))
+		return max(known, self._search_reservation(date))
 
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
 		own_loss = decrement(self.ideal, observed, self.monotonic)
@@ -153,7 +160,13 @@ class Player5(Player):
 		if date.date_number == 1:
 			self.first_scores.append(match.score)
 		bar = self._reservation(date)
-		match.proposed = date.date_number >= 2 and match.score > 0 and match.score >= bar
+		# A proposal alone does not reserve the next round.
+		match.proposed = (
+			date.date_number >= 2
+			and match.score > 0
+			and match.score >= 0.25 * bar
+			and (match.score >= bar or match.score >= self._search_reservation(date))
+		)
 		match.asked = (
 			date.rounds_left > 1
 			and match.score > 0
