@@ -101,3 +101,30 @@ def test_denied_list_is_reversible_without_permanent_incompatibility():
 	p.choose_dates((), RoundContext(20, 1, 2))
 
 	assert 3 not in p.denied
+
+
+def test_lie_flag_controls_ad_exaggeration():
+	p = make_player()
+	assert p.advertise().own_value == 7
+
+	p = make_player()
+	p.LIE = False
+	assert p.advertise().own_value == 5
+
+
+def test_assume_lies_docks_monotonic_claims_only():
+	# Player: m=1, profile (5, 2), ideal (5, 2).
+	honest = make_player()
+	sceptic = make_player()
+	sceptic.ASSUME_LIES = True
+
+	# Monotonic claim 6 is believed as 4: gap 1 on dim 0. Dim 1 untouched.
+	assert honest._penalty((6, 2), (5, 2)) == 0
+	assert sceptic._penalty((6, 2), (5, 2)) == 1
+	# Non-monotonic dim is never docked; docking floors at 0.
+	assert sceptic._penalty((7, 9), (5, 2)) == honest._penalty((7, 9), (5, 2))
+	assert sceptic._believed(0, 1) == 0
+
+	# Ads are claims too.
+	candidate = Candidate(1, Advertisement(0, 6, 1, 2), 0)
+	assert sceptic._estimate_unknown(candidate) == honest._estimate_unknown(candidate) - 1

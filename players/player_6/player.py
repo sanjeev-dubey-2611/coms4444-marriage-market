@@ -53,6 +53,11 @@ class Player6(BasePlayer):
 	DECAY_EXPONENT = 1.4
 	AD_WEIGHT = 0.25
 	DISCOVERY_BONUS_RATIO = 0.10
+	# Honesty toggles. Defaults reproduce the original strategy: we inflate our
+	# ad by +2 and take everyone else's claims at face value.
+	LIE = True  # Exaggerate our advertised monotonic value by +2.
+	ASSUME_LIES = False  # Dock LIE_DISCOUNT from others' monotonic claims.
+	LIE_DISCOUNT = 2
 
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
@@ -83,9 +88,16 @@ class Player6(BasePlayer):
 			difference = max(0, difference)
 		return difference * difference
 
+	def _believed(self, dim: int, value: int) -> int:
+		"""What we believe a claimed trait value really is."""
+		if self.ASSUME_LIES and dim < self.monotonic:
+			return max(0, value - self.LIE_DISCOUNT)
+		return value
+
 	def _penalty(self, observed: Profile, desired: Profile) -> float:
+		believed = tuple(self._believed(dim, value) for dim, value in enumerate(observed))
 		return float(
-			decrement(self.ideal, observed, self.monotonic)
+			decrement(self.ideal, believed, self.monotonic)
 			+ 0.5 * decrement(desired, self.profile, self.monotonic)
 		)
 
@@ -215,8 +227,9 @@ class Player6(BasePlayer):
 
 		total = sum(expected_ours) + 0.5 * sum(expected_theirs)
 		ad = candidate.ad
+		own_value = self._believed(ad.own_dim, ad.own_value)
 		total += (
-			self._gap(ad.own_dim, self.ideal[ad.own_dim], ad.own_value) - expected_ours[ad.own_dim]
+			self._gap(ad.own_dim, self.ideal[ad.own_dim], own_value) - expected_ours[ad.own_dim]
 		)
 		total += 0.5 * (
 			self._gap(ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim])
@@ -225,13 +238,13 @@ class Player6(BasePlayer):
 		return self.bonus - total
 
 	def advertise(self) -> Advertisement:
-		# The one permitted +2 exaggeration is applied only here, at startup.
-		# All date projections and stated ideals remain truthful.
+		# With LIE, the one +2 exaggeration is applied only here, at startup.
+		# All date projections and stated ideals remain truthful either way.
 		showable = range(self.monotonic) if self.monotonic else range(self.dims)
 		own = max(showable, key=lambda dim: self.profile[dim])
 		value = self.profile[own]
 
-		if own < self.monotonic:
+		if self.LIE and own < self.monotonic:
 			value = min(10, value + 2)
 
 		# Pick the dimension with the largest expected cost if unmet.

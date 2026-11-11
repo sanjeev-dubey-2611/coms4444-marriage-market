@@ -1,0 +1,49 @@
+{
+  "name": "player6_robust",
+  "description": "Three-stage robustness tuning for Player6 over randomly generated markets. Stage 1 compares the four honesty settings, stage 2 replays every honesty x one-at-a-time parameter variant on the same markets, stage 3 re-checks the winners on fresh markets.",
+  "markets": 1000,
+  "market_seed": 6000,
+  "validation_seed": 7000,
+  "timeout": 1.0,
+  "objective": "Positive-happiness rate first (handout's primary goal), mean happiness as tie-break.",
+
+  "honesty": [
+    {"label": "lie+trust", "LIE": true, "ASSUME_LIES": false},
+    {"label": "lie+doubt", "LIE": true, "ASSUME_LIES": true},
+    {"label": "honest+trust", "LIE": false, "ASSUME_LIES": false},
+    {"label": "honest+doubt", "LIE": false, "ASSUME_LIES": true}
+  ],
+
+  "parameters": {
+    "EXPLORE_FRACTION": [0.15, 0.30, 0.45],
+    "DECAY_EXPONENT": [0.8, 1.0, 1.4, 2.0],
+    "EARLY_EXCEPTION_RATIO": [0.35, 0.50, 0.65],
+    "REFERENCE_FLOOR_RATIO": [0.20, 0.35, 0.50],
+    "PRIOR_STRENGTH": [1.0, 3.0, 6.0],
+    "EARLY_CONFIDENCE": [0.50, 0.72, 1.0],
+    "AD_WEIGHT": [0.0, 0.25, 0.50],
+    "DISCOVERY_BONUS_RATIO": [0.0, 0.10, 0.25],
+    "ONE_SIDED_LIMIT": [1, 3, 5]
+  },
+
+  "space": {
+    "people": [10, 44],
+    "rounds": [10, 200],
+    "dims": [1, 10],
+    "bonus_ratio": [0.25, 4.0],
+    "list_multiple": [0, 1, 2, 3, 4, 4, 4, 6, 8],
+    "distribution_kinds": {"preset": 1, "groups": 1, "random": 1, "hybrid": 1},
+    "arena_kinds": {"solo": 1, "duel": 3, "field": 6},
+    "duel_share": [0.2, 0.8],
+    "field_share": [0.05, 0.5],
+    "opponent_weights": {"g": 0.5, "r": 0.25, "default": 1.0}
+  },
+
+  "notes": [
+    "A market fixes N, t, d, m, P, B, the list limit, the roster and the engine seed. Every variant replays the same market, so differences are paired.",
+    "bonus_ratio is B divided by the expected cost of a uniformly random marriage under that market's P (own decrement + half the partner's). 1.0 means a random marriage breaks even; B itself then spans a wide absolute range because d and P vary.",
+    "rounds is log-uniform; people is a uniform even number; m is uniform on 0..d.",
+    "Distribution kinds: preset = uniform/normal/mixed; groups = each dimension a submitted group row (or uniform/normal); random = each dimension a random shape (Dirichlet, off-centre normal, skewed, bimodal); hybrid = each dimension drawn from any of those.",
+    "Arena kinds: solo = every seat Player6; duel = Player6 vs one opponent code; field = Player6 vs a random subset of the other codes."
+  ]
+}
