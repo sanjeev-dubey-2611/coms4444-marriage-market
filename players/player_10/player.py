@@ -1,6 +1,5 @@
 """Group 10's greedy strategy with an optimistic projected profile."""
 
-
 from models.player import (
 	Advertisement,
 	Candidate,
