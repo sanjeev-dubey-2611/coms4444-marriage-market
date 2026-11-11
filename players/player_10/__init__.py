@@ -1,1 +1,1 @@
-"""Group 4 player implementation."""
+"""Group 10 player implementation."""

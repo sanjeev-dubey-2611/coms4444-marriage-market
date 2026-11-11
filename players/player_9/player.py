@@ -1,7 +1,10 @@
-"""Group 9: reciprocal search with bounded, personal acceptance thresholds."""
+"""Group 9: truthful public signaling, coordinated matching, and adaptive search."""
 
+import os
+from collections import deque
 from dataclasses import dataclass, field
-from math import ceil, sqrt
+from functools import lru_cache
+from math import ceil, exp, sqrt
 from random import Random
 
 from models.player import (
@@ -92,6 +95,7 @@ class Estimate:
 	mutual_positive: float
 	mean_happiness: float
 	reported_happiness: float | None = None
+	partner_reported_happiness: float | None = None
 
 
 @dataclass
@@ -112,6 +116,7 @@ class PartnerHistory:
 	asked_again: bool = False
 	invited: bool = False
 	estimate: Estimate | None = None
+	outside: float = 0.0  # estimated number of better-than-us options among singles
 
 
 @dataclass
@@ -238,14 +243,182 @@ class CompatibilityModel:
 				):
 					scenarios.append((own_cost, partner_cost, own_weight * partner_weight / count))
 		estimate = self._summarize(scenarios)
-		reported = (
-			self.bonus
-			- sum(own_reports) / len(own_reports)
-			- sum(partner_reports) / (2 * len(partner_reports))
-		)
+		mine = sum(own_reports) / len(own_reports)
+		theirs = sum(partner_reports) / len(partner_reports)
 		return Estimate(
-			estimate.positive, estimate.mutual_positive, estimate.mean_happiness, reported
+			estimate.positive,
+			estimate.mutual_positive,
+			estimate.mean_happiness,
+			self.bonus - mine - theirs / 2,
+			self.bonus - theirs - mine / 2,
 		)
+
+
+# Independent-search defaults. P9_PARAMS="MULT=1.0,FLOOR=0.2" can override
+# them for reproducible experiments; instances never mutate these parameters.
+PARAMS = {
+	'FLOOR': 0.35,  # aspiration floor as a fraction of B
+	'REF': 0.75,  # fraction of the reference opportunity
+	'PCT': 0.6,  # percentile of first-date happiness used as the reference
+	'MULT': 1.3,  # overall bar multiplier
+	'PERS_MIN': 0.7,  # pickiness scale floor
+	'PERS_MAX': 1.2,  # pickiness scale cap (squared)
+	'PERS_SCALE': 0.55,  # private positive rate that maps to scale 1
+	'RES_BASE': 0.60,  # proposal probability threshold base
+	'RES_SPAN': 0.20,  # extra threshold while alternatives remain
+	'AGAIN_ALT': 0.5,  # alternatives level above which a repeat needs readiness
+	'COOLDOWN': 6,  # rounds a declined partner is down-weighted (was 3)
+}
+for _item in os.environ.get('P9_PARAMS', '').split(','):
+	if '=' in _item:
+		_key, _value = _item.split('=', 1)
+		PARAMS[_key.strip()] = float(_value)
+
+
+# Ridge-logistic gate fitted to public advertisements. This score is not proof
+# of player identity or cooperation. The cutoff rejected all 816 noncooperative
+# calibration examples; runtime candidate loss cancels exploration immediately.
+_COOPERATION_WEIGHTS = (
+	6.055266389963511,
+	-5.2803245020372716,
+	-4.60549213339715,
+	-6.283389838550684,
+	7.172524225026243,
+	8.108675817897518,
+	-4.51378117645401,
+	-6.329398405952754,
+	1.0490739039129067,
+	-6.312140165294354,
+	5.067821310282944,
+	6.524643357057741,
+)
+_COOPERATION_CUTOFF = 0.9711576022742818
+
+
+def _cooperation_score(ads: list[Advertisement]) -> float:
+	"""Score an initial public-ad market without accessing opponent identities."""
+	n = len(ads)
+	features = (
+		1.0,
+		sum(ad.seek_dim < 2 for ad in ads) / n,
+		sum(ad.own_value for ad in ads) / (10 * n),
+		sum(abs(ad.seek_value - 5) for ad in ads) / (5 * n),
+		sum(abs(ad.own_value - 5) for ad in ads) / (5 * n),
+		sum(ad.own_value == 10 for ad in ads) / n,
+		sum(ad.seek_value in (0, 10) for ad in ads) / n,
+		*(sum(ad.seek_dim == dim for ad in ads) / n for dim in range(5)),
+	)
+	logit = sum(w * x for w, x in zip(_COOPERATION_WEIGHTS, features, strict=True))
+	return 1 / (1 + exp(-max(-35.0, min(35.0, logit))))
+
+
+def _match_large_market(count: int, weights: dict[tuple[int, int], float]) -> list[int]:
+	"""Maximum positive-pair cardinality, followed by bounded happiness swaps."""
+	neighbours = [[] for _ in range(count)]
+	for a, b in weights:
+		neighbours[a].append(b)
+		neighbours[b].append(a)
+	for a in range(count):
+		neighbours[a].sort(key=lambda b: (-weights[min(a, b), max(a, b)], b))
+	mate = [-1] * count
+	for a, b in sorted(weights, key=lambda edge: (-weights[edge], edge)):
+		if mate[a] < 0 and mate[b] < 0:
+			mate[a] = b
+			mate[b] = a
+
+	def augment(root):
+		parent = [-1] * count
+		base = list(range(count))
+		used = [False] * count
+
+		def lca(a, b):
+			path = [False] * count
+			while True:
+				a = base[a]
+				path[a] = True
+				if mate[a] < 0:
+					break
+				a = parent[mate[a]]
+			while not path[base[b]]:
+				b = parent[mate[base[b]]]
+			return base[b]
+
+		def mark(a, b, common, blossom):
+			while base[a] != common:
+				blossom[base[a]] = blossom[base[mate[a]]] = True
+				parent[a] = b
+				b = mate[a]
+				a = parent[mate[a]]
+
+		queue = deque([root])
+		used[root] = True
+		while queue:
+			a = queue.popleft()
+			for b in neighbours[a]:
+				if base[a] == base[b] or mate[a] == b:
+					continue
+				if b == root or (mate[b] >= 0 and parent[mate[b]] >= 0):
+					common = lca(a, b)
+					blossom = [False] * count
+					mark(a, b, common, blossom)
+					mark(b, a, common, blossom)
+					for i in range(count):
+						if blossom[base[i]]:
+							base[i] = common
+							if not used[i]:
+								used[i] = True
+								queue.append(i)
+				elif parent[b] < 0:
+					parent[b] = a
+					if mate[b] < 0:
+						while b >= 0:
+							a = parent[b]
+							previous = mate[a] if a >= 0 else -1
+							mate[b] = a
+							if a >= 0:
+								mate[a] = b
+							b = previous
+						return True
+					used[mate[b]] = True
+					queue.append(mate[b])
+		return False
+
+	for a in range(count):
+		if mate[a] < 0:
+			augment(a)
+
+	# Keep cardinality fixed. These local swaps improve, but do not globally
+	# maximize, happiness. A fixed iteration bound limits callback time.
+	def weight(a, b):
+		return weights.get((min(a, b), max(a, b)))
+
+	for _ in range(count):
+		pairs = [(a, b) for a, b in enumerate(mate) if a < b]
+		best = 0
+		change = None
+		for i, (a, b) in enumerate(pairs):
+			old = weight(a, b)
+			for c in range(count):
+				if mate[c] < 0:
+					for u, v in [(a, b), (b, a)]:
+						w = weight(u, c)
+						if w is not None and w - old > best:
+							best = w - old
+							change = [(u, c), (v, -1)]
+			for c, d in pairs[i + 1 :]:
+				old_both = old + weight(c, d)
+				for u, v in [(c, d), (d, c)]:
+					x, y = weight(a, u), weight(b, v)
+					if x is not None and y is not None and x + y - old_both > best:
+						best = x + y - old_both
+						change = [(a, u), (b, v)]
+		if change is None:
+			break
+		for a, b in change:
+			mate[a] = b
+			if b >= 0:
+				mate[b] = a
+	return mate
 
 
 class Player9(BasePlayer):
@@ -254,8 +427,12 @@ class Player9(BasePlayer):
 	The compatibility model uses private traits and uncertain reports. Courtship
 	counts estimate willingness independently. The happiness bar falls as the
 	market disappears and is scaled to 70--144% by private compatibility scarcity.
-	First-date presentation is recoverable under our signaling convention; our
-	decisions always use our real profile and ideal.
+	When initial public ads all follow our truthful convention, use a common
+	exploration deadline and cardinality-first, happiness-second matching.
+	The supported N50 mode uses a fitted public-ad gate and polynomial matching.
+	Otherwise use independent reciprocal search immediately.
+	We display our true profile and ideal; partners who use a decodable
+	first-date swap or who mirror our messages back are still recognised.
 	"""
 
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
@@ -277,9 +454,29 @@ class Player9(BasePlayer):
 		self.guaranteed_positive = self.bonus > maximum_penalty(
 			self.profile, self.ideal, self.monotonic
 		)
+		# Coordinate only in the market size and time range this mode supports.
+		self.coordination_eligible = (
+			8 <= self.people <= 22
+			and self.monotonic >= 2
+			and self.rounds >= 2 * self.people + 6
+			and self.bonus > 0
+		)
+		# The statistical gate was evaluated only in this parameter domain.
+		self.statistical_coordination = (
+			self.people == 50
+			and self.dims == 5
+			and self.monotonic == 2
+			and self.bonus == 150
+			and self.rounds == 250
+		)
+		self.coordination_eligible |= self.statistical_coordination
+		self.coordinating: bool | None = None
+		self.exploring = False
+		self.target: int | None = None
+		self.target_chosen = False
 
 	def advertise(self) -> Advertisement:
-		"""Show a strength and disclose a preference costly to leave unmet."""
+		"""Disclose a strength and costly preference, with the small-market convention."""
 		showable = range(self.monotonic) if self.monotonic else range(self.dims)
 		own = max(
 			showable,
@@ -289,12 +486,18 @@ class Player9(BasePlayer):
 			range(self.dims),
 			key=lambda i: sum(cost[i] for cost in self.beliefs.prior_own_costs),
 		)
+		if self.coordination_eligible and not self.statistical_coordination:
+			# A public, truthful convention; matching is still based on dates.
+			own = 1
 		return Advertisement(own, self.profile[own], seek, self.ideal[seek])
 
-	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
-		"""Return an unordered shortlist; ranking controls inclusion only."""
+	def _choose_independently(
+		self, candidates: tuple[Candidate, ...], turn: RoundContext
+	) -> list[int]:
+		"""Rank candidates for inclusion; the engine ignores list order."""
 		self.availability.observe(len(candidates), turn.round)
 		self.available_ids = {candidate.index for candidate in candidates}
+		self._refresh_market()
 		if self.bonus <= 0:
 			return []
 		ranked = []
@@ -307,9 +510,6 @@ class Player9(BasePlayer):
 				if history and history.estimate
 				else self.beliefs.ad_estimate(candidate.ad)
 			)
-			commitment = self._commitment_chance(
-				history, candidate.dates, turn.rounds_left, turn.round
-			)
 			quality = max(-1.0, min(1.0, estimate.mean_happiness / max(1, self.bonus)))
 			# A preference-driven partner needs a favorable outcome too. Once
 			# presentation is possible, true mutual compatibility is less decisive
@@ -318,7 +518,9 @@ class Player9(BasePlayer):
 			if candidate.dates >= 1:
 				weight = 0.0
 			compatible = (1 - weight) * estimate.positive + weight * estimate.mutual_positive
-			score = compatible * (0.4 + 0.6 * commitment) * (1 + 0.5 * quality)
+			# Willingness is learned only after dates and ranking by it chased
+			# willing-but-mediocre partners; happiness is higher without it.
+			score = compatible * (1 + 0.5 * quality)
 			if history and turn.round <= history.cooldown_until and turn.rounds_left > 2:
 				score *= 0.25
 			ranked.append((score, self.rng.random(), candidate))
@@ -341,33 +543,19 @@ class Player9(BasePlayer):
 		return selected
 
 	def project(self, date: DateContext) -> Profile:
-		"""Enhance the first display reversibly; mirror earlier ideals on repeats."""
+		"""Show the true profile. Flattering displays won more marriages but
+		worse ones; mean happiness is higher when partners decide on the truth."""
 		messages = self._messages(date.partner)
-		if date.date_number >= 2 and messages.first_ideal is not None:
-			claim = messages.first_ideal
-		else:
-			ad = self.advertise()
-			values = list(self.profile)
-			if ad.own_dim < self.monotonic and ad.own_value < 10:
-				for dim in range(self.monotonic):
-					if values[dim] == ad.own_value:
-						values[dim] = 10
-					elif values[dim] == 10:
-						values[dim] = ad.own_value
-			claim = tuple(values)
+		claim = self.profile
 		messages.current_profile = claim
 		if messages.first_sent_profile is None:
 			messages.first_sent_profile = claim
 		return claim
 
 	def describe_ideal(self, date: DateContext, observed: Profile) -> Profile:
-		"""Disclose our ideal first; mirror the partner's first profile on repeats."""
+		"""Describe the true ideal, on every date."""
 		messages = self._messages(date.partner)
-		claim = (
-			messages.first_profile
-			if date.date_number >= 2 and messages.first_profile is not None
-			else self.ideal
-		)
+		claim = self.ideal
 		messages.current_ideal = claim
 		if messages.first_sent_ideal is None:
 			messages.first_sent_ideal = claim
@@ -376,7 +564,8 @@ class Player9(BasePlayer):
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
 		profile_evidence, ideal_evidence = self._date_evidence(date, observed, stated_ideal)
 		decision = self._assess_date(date, profile_evidence, ideal_evidence)
-		if self.guaranteed_positive:
+		assigned_courtship = self.coordinating and (self.exploring or self.target is not None)
+		if self.guaranteed_positive and not assigned_courtship:
 			# Preserve ordinary evidence and cooldown updates even when our private
 			# traits prove every possible marriage strictly positive.
 			history = self.history[date.partner]
@@ -402,26 +591,48 @@ class Player9(BasePlayer):
 		history = self.history[outcome.partner]
 		model = history.commitment
 		if outcome.date_number >= 2:
-			count = (
-				model.invited_yes + model.invited_no
-				if history.invited
-				else model.proposal_yes + model.proposal_no
-			)
-			if count < 3:
-				self.population_commitment.observe_proposal(
-					outcome.partner_proposed, history.invited
-				)
+			self.population_commitment.observe_proposal(outcome.partner_proposed, history.invited)
 			model.observe_proposal(outcome.partner_proposed, history.invited)
 		if outcome.partner_proposed:
 			history.last_proposal_round = outcome.round
 		if outcome.married:
 			return
 		if history.asked_again:
-			# Cap each partner's population contribution so one long courtship
-			# cannot convince us the entire market behaves like that partner.
-			if model.repeat_yes + model.repeat_no < 3:
-				self.population_commitment.observe_repeat(outcome.again)
+			self.population_commitment.observe_repeat(outcome.again)
 			model.observe_repeat(outcome.again)
+
+	def _outside_options(self, partner: int) -> float:
+		"""How many singles we know would make `partner` happier than we would.
+
+		Uses only our own date evidence (exact profiles and ideals of people we
+		dated); scaled up by the share of singles we have not dated.
+		"""
+		history = self.history.get(partner)
+		if not history or history.last_profile is None or history.estimate is None:
+			return 0.0
+		with_us = history.estimate.partner_reported_happiness or 0.0
+		known = rivals = 0
+		for other_id in self.available_ids:
+			if other_id == partner:
+				continue
+			other = self.history.get(other_id)
+			if not other or other.last_profile is None:
+				continue
+			known += 1
+			cost_j = decrement(history.last_ideal, other.last_profile, self.monotonic)
+			cost_k = decrement(other.last_ideal, history.last_profile, self.monotonic)
+			happy_j = self.bonus - cost_j - cost_k / 2
+			happy_k = self.bonus - cost_k - cost_j / 2
+			if happy_j > with_us and happy_k > 0:
+				rivals += 1
+		if not known:
+			return 0.0
+		return rivals * len(self.available_ids - {partner}) / known
+
+	def _refresh_market(self) -> None:
+		for partner, history in self.history.items():
+			if partner in self.available_ids:
+				history.outside = self._outside_options(partner)
 
 	def _messages(self, partner: int) -> Disclosures:
 		return self.disclosures.setdefault(partner, Disclosures())
@@ -469,15 +680,17 @@ class Player9(BasePlayer):
 	def _aspiration(self, rounds_left: int, round_number: int, partner: int) -> float:
 		"""A personal reservation value that relaxes with scarcity and time."""
 		values = sorted(value for index, value in self.opportunities.items() if index != partner)
-		reference = values[int(0.6 * (len(values) - 1))] if values else 0.0
-		threshold = max(0.35 * self.bonus, 0.75 * max(0.0, reference))
+		reference = values[int(PARAMS['PCT'] * (len(values) - 1))] if values else 0.0
+		threshold = max(PARAMS['FLOOR'] * self.bonus, PARAMS['REF'] * max(0.0, reference))
 		fraction_left = (rounds_left - 1) / max(1, self.rounds - 1)
 		promising = self.availability.alternatives(round_number) * self.fresh_positive
 		breadth = min(1.0, promising / max(4, sqrt(self.people)))
 		urgency = min(1.0, self.availability.retention / 0.9)
-		bar = 1.3 * (threshold * fraction_left * breadth * urgency)
-		personal = min(1.2, self.beliefs.private_positive / 0.55) ** 2
-		return bar * max(0.7, personal)
+		bar = PARAMS['MULT'] * (threshold * fraction_left * breadth * urgency)
+		personal = (
+			min(PARAMS['PERS_MAX'], self.beliefs.private_positive / PARAMS['PERS_SCALE']) ** 2
+		)
+		return bar * max(PARAMS['PERS_MIN'], personal)
 
 	def _commitment_chance(
 		self, history: PartnerHistory | None, dates: int, rounds_left: int, round_number: int
@@ -499,6 +712,15 @@ class Player9(BasePlayer):
 				)
 				invited = recent_invitation or dates + offset >= 2
 				proposal = model.proposal_probability(invited, self.population_commitment)
+				# A partner proposes in proportion to how happy they said they
+				# would be with us, not only to how often they said yes before.
+				if (
+					history
+					and history.estimate
+					and history.estimate.partner_reported_happiness is not None
+				):
+					fit = history.estimate.partner_reported_happiness / max(1.0, self.bonus)
+					proposal *= max(0.1, min(1.0, 0.5 + fit))
 				if history and history.last_proposal_round:
 					age = round_number + offset - history.last_proposal_round
 					proposal = max(proposal, 0.95 * 0.5 ** max(0, age - 1))
@@ -523,10 +745,13 @@ class Player9(BasePlayer):
 				known = history.estimate.positive * self._commitment_chance(
 					history, history.dates, rounds_left, round_number
 				)
+				known /= 1 + 1.0 * history.outside
 				value = max(value, known * min(0.95, self.availability.retention) ** age)
 		return value
 
-	def _assess_date(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
+	def _assess_independently(
+		self, date: DateContext, observed: Profile, stated_ideal: Profile
+	) -> Decision:
 		"""Record evidence, then decide whether to repeat, propose, or block."""
 		if date.round == self.request_round and date.partner in self.last_requests:
 			self.request_hits += 1
@@ -549,6 +774,7 @@ class Player9(BasePlayer):
 		history.dates += 1
 		estimate = self.beliefs.date_estimate(history, date.partner_ad)
 		history.estimate = estimate
+		history.outside = self._outside_options(date.partner)
 		if history.dates == 1:
 			self.opportunities[date.partner] = estimate.reported_happiness
 			if len(self.opportunities) > 128:
@@ -572,7 +798,7 @@ class Player9(BasePlayer):
 		fraction_left = (date.rounds_left - 1) / max(1, self.rounds - 1)
 		available = self.availability.alternatives(date.round)
 		alternatives = min(1.0, available * self.fresh_positive / max(4, sqrt(self.people)))
-		reservation = 0.60 + 0.20 * fraction_left * alternatives
+		reservation = PARAMS['RES_BASE'] + PARAMS['RES_SPAN'] * fraction_left * alternatives
 		ready = estimate.positive >= reservation and estimate.reported_happiness > aspiration
 		if history.last_proposal_round and date.round - history.last_proposal_round <= 2:
 			# Willingness can justify ending the search, but does not establish
@@ -598,13 +824,170 @@ class Player9(BasePlayer):
 			and date.rounds_left > 1
 			and estimate.positive >= 0.5
 			and estimate.reported_happiness > 0
-			and (ready or alternatives < 0.5)
+			# While most of the game remains, a repeat date must be with an excellent
+			# match; otherwise the round is better spent meeting someone new.
+			and (ready or alternatives < PARAMS['AGAIN_ALT'])
 			and worth_retaining
 		)
 		if not again:
-			history.cooldown_until = date.round + 3
+			history.cooldown_until = date.round + int(PARAMS['COOLDOWN'])
 		history.asked_again = again
 		if propose:
 			history.last_own_proposal_round = date.round
 		# Ambiguous reports and stalled courtships receive reversible cooldowns.
 		return Decision(again=again, propose=propose)
+
+	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
+		"""Coordinate under a tested public gate, otherwise search independently."""
+		if self.coordinating is None:
+			if self.statistical_coordination:
+				# Include our own unchanged advertisement so peers see identical inputs.
+				ads = [self.advertise(), *(candidate.ad for candidate in candidates)]
+				self.coordinating = (
+					len(ads) == self.people
+					and all(ad.own_dim < self.monotonic for ad in ads)
+					and _cooperation_score(ads) >= _COOPERATION_CUTOFF
+				)
+			else:
+				self.coordinating = (
+					self.coordination_eligible
+					and bool(candidates)
+					and all(candidate.ad.own_dim == 1 for candidate in candidates)
+				)
+		if (
+			self.statistical_coordination
+			and turn.round < min(2 * self.people, self.rounds // 2)
+			and len(candidates) < self.people - 1
+		):
+			# Reserved repeats, blocks or marriages contradict shared exploration.
+			# Candidate loss need not establish which event occurred.
+			self.coordinating = False
+		if not self.coordinating:
+			return self._choose_independently(candidates, turn)
+
+		self.availability.observe(len(candidates), turn.round)
+		self.available_ids = {candidate.index for candidate in candidates}
+		self.exploring = (
+			turn.round < min(2 * self.people, self.rounds // 2) and turn.rounds_left > 6
+		)
+		if self.exploring:
+			fresh = [candidate for candidate in candidates if candidate.index not in self.history]
+			fresh.sort(
+				key=lambda candidate: self.beliefs.ad_estimate(candidate.ad).mean_happiness,
+				reverse=True,
+			)
+			width = min(6, self.list_limit if self.list_limit is not None else len(fresh))
+			selected = [candidate.index for candidate in fresh[:width]]
+		else:
+			if not self.target_chosen:
+				self.target = self._matching_target()
+				self.target_chosen = True
+			selected = (
+				[self.target]
+				if self.target in self.available_ids
+				else self._choose_independently(candidates, turn)
+			)
+		self.last_requests = set(selected)
+		return selected
+
+	def _matching_target(self) -> int | None:
+		"""Construct positive matches from personal dating evidence.
+
+		Small markets optimize cardinality and happiness exactly. The larger-market
+		solver maximizes cardinality but only locally refines happiness.
+
+		The fixed exploration deadline helps peers build comparable graphs. Each
+		person solves their own graph; no state is shared between instances.
+		The graph is an estimate: stable disclosures are not proof of honesty.
+		"""
+		people = {
+			index: (history.last_profile, history.last_ideal)
+			for index, history in self.history.items()
+			if index in self.available_ids
+			and history.last_profile is not None
+			and history.profile_changes == 0
+			and history.ideal_changes == 0
+		}
+		people[self.index] = (self.profile, self.ideal)
+		indices = sorted(people)
+		count = len(indices)
+		# One extra positive pair outweighs any possible happiness difference.
+		reward = (count + 1) * max(1, self.bonus)
+		weights = {}
+		for first, a in enumerate(indices):
+			profile_a, ideal_a = people[a]
+			for second in range(first + 1, count):
+				profile_b, ideal_b = people[indices[second]]
+				cost_a = decrement(ideal_a, profile_b, self.monotonic)
+				cost_b = decrement(ideal_b, profile_a, self.monotonic)
+				happy_a = self.bonus - cost_a - cost_b / 2
+				happy_b = self.bonus - cost_b - cost_a / 2
+				if happy_a > 0 and happy_b > 0:
+					weights[first, second] = reward + happy_a + happy_b
+
+		if self.statistical_coordination:
+			mate = _match_large_market(count, weights)
+			partner = mate[indices.index(self.index)]
+			return indices[partner] if partner >= 0 else None
+
+		choices: dict[int, int | None] = {}
+
+		@lru_cache(None)
+		def solve(mask: int) -> float:
+			if not mask:
+				return 0.0
+			bit = mask & -mask
+			first = bit.bit_length() - 1
+			rest = mask ^ bit
+			best, choice = solve(rest), None
+			remaining = rest
+			while remaining:
+				second_bit = remaining & -remaining
+				second = second_bit.bit_length() - 1
+				remaining ^= second_bit
+				weight = weights.get((first, second))
+				if weight is None:
+					continue
+				value = weight + solve(rest ^ second_bit)
+				if value > best:
+					best, choice = value, second
+			choices[mask] = choice
+			return best
+
+		mask = (1 << count) - 1
+		solve(mask)
+		target = None
+		while mask:
+			bit = mask & -mask
+			first = bit.bit_length() - 1
+			second = choices[mask]
+			mask ^= bit
+			if second is not None:
+				if indices[first] == self.index:
+					target = indices[second]
+					break
+				if indices[second] == self.index:
+					target = indices[first]
+					break
+				mask ^= 1 << second
+		solve.cache_clear()
+		return target
+
+	def _assess_date(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
+		decision = self._assess_independently(date, observed, stated_ideal)
+		if not self.coordinating:
+			return decision
+		history = self.history[date.partner]
+		if self.exploring:
+			# Blocking would hide vertices from our graph and spoil agreement.
+			history.asked_again = False
+			return Decision()
+		estimate = history.estimate
+		if (
+			date.partner == self.target
+			and estimate.reported_happiness > 0
+			and estimate.partner_reported_happiness > 0
+		):
+			history.asked_again = True
+			return Decision(again=date.rounds_left > 1, propose=date.date_number >= 2)
+		return decision

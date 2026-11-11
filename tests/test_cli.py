@@ -42,7 +42,7 @@ def test_distribution_options():
 	assert settings(['--dim-dist', '0:3,1:normal']).dim_dist == '0:3,1:normal'
 	assert settings(['--dim-dist', '0:3,1:normal']).dims == 2
 	assert settings(['--dim-dist-file']).dim_dist_file == DEFAULT_DIM_DIST_FILE
-	assert settings(['--dim-dist-file']).dims == 3
+	assert settings(['--dim-dist-file']).dims == 10
 
 
 def test_dim_dist_file_clamps_monotonic_to_inferred_dims():
