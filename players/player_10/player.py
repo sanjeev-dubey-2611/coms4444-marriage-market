@@ -1,7 +1,5 @@
 """Group 10's greedy strategy with an optimistic projected profile."""
 
-import numpy as np
-
 from models.player import (
 	Advertisement,
 	Candidate,
@@ -26,6 +24,8 @@ class Player10(BasePlayer):
 
 		self.samples: list = [self.profile, self.ideal]
 		self.dated: list[int] = []
+
+		self.monotonic_bump = int(self.bonus / 75)
 
 	def advertise(self) -> Advertisement:
 		# Show off the monotonic dimension we score best on, and ask for the
@@ -70,15 +70,17 @@ class Player10(BasePlayer):
 		theirs = self._gap(ad.seek_dim, ad.seek_value, self.profile[ad.seek_dim])
 		return mine + theirs / 2
 
-	# def project(self, date: DateContext) -> Profile:
-	# 	projected = list(self.profile)
-	# 	dim = date.partner_ad.seek_dim
-	# 	value = date.partner_ad.seek_value
-	# 	projected[dim] = min(10, value + 2) if dim < self.monotonic else value
-	# 	return tuple(projected)
+	def project(self, date: DateContext) -> Profile:
+		projected = list(self.profile)
+		for i in range(self.monotonic):
+			projected[i] = min(10, projected[i] + self.monotonic_bump)
+		return tuple(projected)
 
 	# def describe_ideal(self, date: DateContext, observed: Profile) -> Profile:
-	# 	return observed
+	# 	ideal = list(self.ideal)
+	# 	for i in range(self.monotonic):
+	# 		ideal[i] = max(0, ideal[i] - 2)
+	# 	return tuple(ideal)
 
 	def calculate_estimate(self, their_profile, their_ideal):
 		mine = decrement(self.ideal, their_profile, self.monotonic)
@@ -89,41 +91,43 @@ class Player10(BasePlayer):
 		estimate = self.calculate_estimate(observed, stated_ideal)
 		self.estimates[date.partner] = estimate
 
-		if self.is_collect_data(date):
-			if (
-				date.date_number == 1
-			):  # There is a chance we get paired again with them without our consent, so only add if first date
-				self.dated.append(date.partner)
-				self.samples.extend([observed, stated_ideal])
-			# Don't do anything, but if it seems our estimate will be negative, then we can set them as incompatible
-			return Decision(incompatible=estimate <= 0)
-		elif date.partner not in self.dated:
-			# We can still collect data if we see someone new while searching for matches
-			self.dated.append(date.partner)
-			self.samples.extend([observed, stated_ideal])
-		else:
-			i = self.dated.index(date.partner)
-			_prev_observed = self.samples[i * 2]
-			_prev_ideal = self.samples[i * 2 + 1]
-			# @TODO: We can maybe do something if they've changed their profile
+		# if self.is_collect_data(date):
+		# 	if (
+		# 		date.date_number == 1
+		# 	):  # There is a chance we get paired again with them without our consent, so only add if first date
+		# 		self.dated.append(date.partner)
+		# 		self.samples.extend([observed, stated_ideal])
+		# 	# Don't do anything, but if it seems our estimate will be negative, then we can set them as incompatible
+		# 	return Decision(incompatible=estimate <= 0)
+		# elif date.partner not in self.dated:
+		# 	# We can still collect data if we see someone new while searching for matches
+		# 	self.dated.append(date.partner)
+		# 	self.samples.extend([observed, stated_ideal])
+		# else:
+		# 	i = self.dated.index(date.partner)
+		# 	_prev_observed = self.samples[i * 2]
+		# 	_prev_ideal = self.samples[i * 2 + 1]
+		# @TODO: We can maybe do something if they've changed their profile
 
 		if estimate <= 0:
 			return Decision(incompatible=True)
 
 		# Find average person remaining and calculate their estimate. We want to propose if it is better than mean.
-		samples = np.array(self.samples)
-		dated = np.array(self.dated)
-		remaining_samples = samples[np.where(np.isin(dated, self.remaining))]
-		remaining_mean = remaining_samples.mean(axis=0)
-		mean_estimate = self.calculate_estimate(remaining_mean, remaining_mean)
+		# samples = np.array(self.samples)
+		# dated = np.array(self.dated)
+		# remaining_samples = samples[np.where(np.isin(dated, self.remaining))]
+		# remaining_mean = remaining_samples.mean(axis=0)
+		# mean_estimate = self.calculate_estimate(remaining_mean, remaining_mean)
+
+		propose_threshold = float(date.rounds_left) / float(self.rounds) * self.bonus
 
 		# @TODO: we can potentially do some threshold decay based on number of turns left and/or single people left
 		# propose_threshold = mean_estimate
-		propose_threshold = 0
-		if date.partner in self.proposed_to_me:
-			propose_threshold = mean_estimate / 2
+		# propose_threshold = 0
+		# if date.partner in self.proposed_to_me:
+		# 	propose_threshold = mean_estimate / 2
 		propose = bool(date.date_number >= 2 and estimate > propose_threshold)
-		return Decision(again=False, propose=propose)
+		return Decision(again=estimate > propose_threshold, propose=propose)
 
 	def on_outcome(self, outcome: DateOutcome) -> None:
 		if outcome.partner_proposed:

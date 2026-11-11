@@ -1,0 +1,16 @@
+{
+  "name": "bonus_sweep",
+  "description": "The handout's question: if B is very high, what will happen? Twenty greedy players, the bonus swept from nothing to overwhelming. Watch the married share, the round people marry on, and how little the match quality matters once B dwarfs every decrement.",
+  "defaults": {
+    "players": [["g", 20]],
+    "rounds": 100,
+    "dims": 5,
+    "monotonic": 2,
+    "distribution": "mixed",
+    "timeout": 0
+  },
+  "seeds": [1, 2, 3, 4, 5],
+  "grid": {
+    "bonus": [0, 25, 50, 100, 200, 500, 1000, 10000]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "tournament",
+  "description": "End-of-project standings. Every loaded group plays a market where it holds every seat, a market split half-and-half with each other group, and (with three or more groups) one market with everybody dealt in round-robin. Each roster plays every arena across every seed. Groups are ranked by the share of their seats that ended with positive happiness (the handout's primary goal), with mean happiness (the secondary goal) as the tie-break.",
+  "notes": [
+    "There is no scoring rule inside a single run. A run produces one happiness per person; groups are ranked by averages over every seat they held.",
+    "The bonus grid straddles the expected cost of a random marriage. With d=5 and m=2 under the mixed distribution a random pairing costs roughly 100 once the partner's half is included, so B=50 punishes careless marriages, B=100 is close to break-even, and B=200 rewards almost any marriage."
+  ],
+  "rosters": ["solo", "pairs", "mix"],
+  "seeds": [1, 2, 3, 4, 5],
+  "defaults": {
+    "people": 20,
+    "rounds": 100,
+    "dims": 5,
+    "monotonic": 2,
+    "distribution": "mixed",
+    "timeout": 1.0
+  },
+  "grid": {
+    "bonus": [50, 100, 200]
+  }
+}
