@@ -43,19 +43,22 @@ class Player6(BasePlayer):
 	private to this instance.
 	"""
 
-	EXPLORE_FRACTION = 0.30
-	EARLY_EXCEPTION_RATIO = 0.50  # Tuned for positive happiness; see configs/player6_optimization_results.md.
-	PRIOR_STRENGTH = 3.0
-	EARLY_CONFIDENCE = 0.72
+	# Defaults adopted from the robust_tuning sweep (1000 training markets,
+	# validated on 1000 fresh ones): +2.57 pts positive rate vs the previous
+	# defaults (95% CI +1.88 to +3.25), mean happiness -2.28.
+	EXPLORE_FRACTION = 0.15
+	EARLY_EXCEPTION_RATIO = 0.35
+	PRIOR_STRENGTH = 1.0
+	EARLY_CONFIDENCE = 0.5
 	END_MARGIN = 0.01
-	ONE_SIDED_LIMIT = 3
-	REFERENCE_FLOOR_RATIO = 0.35
-	DECAY_EXPONENT = 1.4
+	ONE_SIDED_LIMIT = 5
+	REFERENCE_FLOOR_RATIO = 0.2
+	DECAY_EXPONENT = 2.0
 	AD_WEIGHT = 0.25
-	DISCOVERY_BONUS_RATIO = 0.10
-	# Honesty toggles. Defaults reproduce the original strategy: we inflate our
-	# ad by +2 and take everyone else's claims at face value.
-	LIE = True  # Exaggerate our advertised monotonic value by +2.
+	DISCOVERY_BONUS_RATIO = 0.0
+	# Honesty toggles. The sweep found honest ads slightly better than the +2
+	# exaggeration, and doubting everyone's claims much worse (-8.5 pts).
+	LIE = False  # Exaggerate our advertised monotonic value by +2.
 	ASSUME_LIES = False  # Dock LIE_DISCOUNT from others' monotonic claims.
 	LIE_DISCOUNT = 2
 
@@ -116,7 +119,9 @@ class Player6(BasePlayer):
 		ads = self.ad_desires[dim] if desire else self.ad_traits[dim]
 		prior = self._prior(dim)
 		# Full-date observations get greater weight than advertised claims.
-		weights = [direct[v] + self.AD_WEIGHT * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)]
+		weights = [
+			direct[v] + self.AD_WEIGHT * ads[v] + self.PRIOR_STRENGTH * prior[v] for v in range(11)
+		]
 		total = sum(weights)
 		return [w / total for w in weights]
 

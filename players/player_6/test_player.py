@@ -1,5 +1,6 @@
 """Tests for Player 6's secretary-style, truthful dating strategy."""
 
+import math
 import uuid
 
 from models.player import (
@@ -34,12 +35,13 @@ def date(round_number, number=1, partner=1):
 def test_exploration_and_truthful_disclosures():
 	p = make_player()
 
-	assert p.explore_rounds == 6
+	assert p.explore_rounds == math.ceil(20 * Player6.EXPLORE_FRACTION)
 	assert p.project(date(5)) == p.profile
 	assert p.project(date(7)) == p.profile
 	assert p.describe_ideal(date(7), (5, 8)) == p.ideal
 
-	assert not p.decide(date(1, 2), (5, 8), (5, 8)).propose
+	# Score = 100 - 49 - 0.5 * 49 = 26.5: positive but not exceptional while exploring.
+	assert not p.decide(date(1, 2), (5, 9), (5, 9)).propose
 
 	# A perfect match is exceptional enough to pursue during exploration.
 	assert p.decide(date(2), p.ideal, p.profile).again
@@ -61,7 +63,7 @@ def test_repeat_observations_replace_distribution_sample():
 
 def test_tuned_early_exception_accepts_positive_match_below_old_cutoff():
 	p = make_player()
-	# Score = 100 - 25 - 0.5 * 25 = 62.5: clears 50%, below the old 65%.
+	# Score = 100 - 25 - 0.5 * 25 = 62.5: clears the early-exception cutoff.
 	decision = p.decide(date(1), (5, 7), (5, 7))
 	assert decision.again
 	assert not decision.propose
@@ -93,8 +95,10 @@ def test_short_game_and_interest_limits():
 def test_denied_list_is_reversible_without_permanent_incompatibility():
 	p = make_player(rounds=20)
 
-	p.decide(date(1, partner=3), (5, 10), (5, 8))
-	p.choose_dates((), RoundContext(7, 14, 10))
+	# Score = 100 - 64 - 0.5 * 49 = 11.5: positive, but below the post-exploration
+	# reservation threshold early on, and above it once the threshold decays.
+	p.decide(date(1, partner=3), (5, 10), (5, 9))
+	p.choose_dates((), RoundContext(p.explore_rounds + 1, 14, 10))
 
 	assert 3 in p.denied
 
@@ -105,6 +109,7 @@ def test_denied_list_is_reversible_without_permanent_incompatibility():
 
 def test_lie_flag_controls_ad_exaggeration():
 	p = make_player()
+	p.LIE = True
 	assert p.advertise().own_value == 7
 
 	p = make_player()
