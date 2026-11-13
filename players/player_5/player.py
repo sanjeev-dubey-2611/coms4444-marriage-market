@@ -159,7 +159,8 @@ class Player5(Player):
 			if match is None:
 				if turn.rounds_left >= 2:
 					fresh.append(candidate)
-			elif match.score > 0 and match.retry_round <= turn.round:
+			# On the last round, there is no later chance to retry a known match.
+			elif match.score > 0 and (turn.rounds_left == 1 or match.retry_round <= turn.round):
 				known.append(candidate)
 		known.sort(
 			key=lambda candidate: self._match_value(self.history[candidate.index], turn.round),
