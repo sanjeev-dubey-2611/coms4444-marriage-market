@@ -1,0 +1,2957 @@
+{
+  "seed": 7,
+  "baseline_commit": "9e4c5d8c646013b50554e6ad39e0c2025d2b3f4f",
+  "player_sha256": "1bcd5a285154f8345d7e7ab79f6b1c710642dddabd44cd47394fffa4cf9490f0",
+  "scope": "One-factor board coverage; equally weighted markets; not a full Cartesian sweep or a multi-seed validation.",
+  "list_multiple": 4,
+  "timeout": 1,
+  "summary": {
+    "baseline": {
+      "positive_rate": 0.8613797549967762,
+      "mean_happiness": 64.2927659574468,
+      "married_rate": 0.8613797549967762,
+      "negative_rate": 0.0,
+      "positive_rate_delta": 0.0,
+      "wins": 0,
+      "ties": 47,
+      "losses": 0,
+      "group5_faults": 0,
+      "all_faults": 0
+    },
+    "market_only": {
+      "positive_rate": 0.8603288201160542,
+      "mean_happiness": 64.32995809155383,
+      "married_rate": 0.8603288201160542,
+      "negative_rate": 0.0,
+      "positive_rate_delta": -0.0010509348807221132,
+      "wins": 7,
+      "ties": 34,
+      "losses": 6,
+      "group5_faults": 0,
+      "all_faults": 0
+    },
+    "learning_only": {
+      "positive_rate": 0.8545067698259188,
+      "mean_happiness": 63.332411347517734,
+      "married_rate": 0.8566344294003868,
+      "negative_rate": 0.002127659574468085,
+      "positive_rate_delta": -0.006872985170857513,
+      "wins": 9,
+      "ties": 26,
+      "losses": 12,
+      "group5_faults": 0,
+      "all_faults": 0
+    },
+    "combined": {
+      "positive_rate": 0.8523791102514507,
+      "mean_happiness": 63.748636363636365,
+      "married_rate": 0.8564410058027079,
+      "negative_rate": 0.004061895551257254,
+      "positive_rate_delta": -0.009000644745325598,
+      "wins": 10,
+      "ties": 22,
+      "losses": 15,
+      "group5_faults": 0,
+      "all_faults": 0
+    }
+  },
+  "cases": [
+    {
+      "name": "bonus-10",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 10,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "bonus-150",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 150,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 104.3,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 101.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 103.5,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 106.4,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "bonus-50",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 50,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.8,
+          "mean_happiness": 16.5,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.8,
+          "mean_happiness": 18.95,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 14.25,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9,
+          "mean_happiness": 14.25,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "bonus-500",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 500,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 450.35,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 445.1,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 436.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 450.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-1-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 1,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "edc18eef730da3ba88d4961a360b763cca304be2ea6dc6bd5fffe07a78171779",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 94.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 96.85,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 94.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 96.85,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-1-mono-1",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 1,
+        "monotonic": 1,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "73ba4cc38e0f74ff8af60505f3bbb1798ad88c83fd3763faa0b5ccc446df2a73",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 95.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 92.0,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 95.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 92.0,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-10-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 10,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "a6cf24787aa6fdb863e9a2ce55fa32239d02065a4c00339606ccbebd6d59e0ab",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.2,
+          "mean_happiness": 3.55,
+          "married_rate": 0.2,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.2,
+          "mean_happiness": 3.55,
+          "married_rate": 0.2,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.1,
+          "mean_happiness": 1.85,
+          "married_rate": 0.1,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.1,
+          "mean_happiness": 1.85,
+          "married_rate": 0.1,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-10-mono-10",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 10,
+        "monotonic": 10,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "a5df54f558b302321c4ec567ad90d9293f76b37adcfcf5fc961d1b0d1b40ecfe",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 50.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 54.35,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 47.4,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9,
+          "mean_happiness": 44.6,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-10-mono-5",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 10,
+        "monotonic": 5,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "641621106cca5d25d9ba62c1bcc8d7e28e94735a75e780318cb6120ddaf78f13",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.7,
+          "mean_happiness": 21.9,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.6,
+          "mean_happiness": 23.2,
+          "married_rate": 0.6,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.6,
+          "mean_happiness": 20.95,
+          "married_rate": 0.6,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.6,
+          "mean_happiness": 20.95,
+          "married_rate": 0.6,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-2-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 2,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "d3d480bf7c1e6877bc61534b05f2c40f7c76404aba310bc9bb0f019d8cff9a46",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 71.3,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 77.3,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 78.9,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 79.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-2-mono-1",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 2,
+        "monotonic": 1,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "7aa7febb5221444348cf2de02179fce23fea6eda3f805d2f413acf2f01303120",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 81.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 85.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 79.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 86.7,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-2-mono-2",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 2,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "c9812afb3993a12360bdcf1efdd81d06c4c7b0f97ec5ffde3160b48bb538cc2a",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 88.1,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 90.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 92.65,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 88.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-24-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 24,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "3027db3774e67fba9b03cbb257aa664c4cd066a2184c0530c48da5aae1de71a6",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-24-mono-12",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 24,
+        "monotonic": 12,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "5d16b2c0e6c6a2cf5ab4c1198b888ade85ed5335d0486f808863acc570530426",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.0,
+          "mean_happiness": 0.0,
+          "married_rate": 0.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-24-mono-24",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 24,
+        "monotonic": 24,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "178c5cffe6985afe43dd083da943408e1f70e0aa661c409b254fcc553e7273eb",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.4,
+          "mean_happiness": 3.4,
+          "married_rate": 0.4,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.5,
+          "mean_happiness": 4.85,
+          "married_rate": 0.5,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.5,
+          "mean_happiness": 5.8,
+          "married_rate": 0.6,
+          "negative_rate": 0.1,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.5,
+          "mean_happiness": 6.9,
+          "married_rate": 0.6,
+          "negative_rate": 0.1,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-5-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "460f80afb0c890eb8ab1f243d80c495a235a9de5055b991ad48f3be4ded5df98",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 48.1,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 38.95,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 35.15,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9,
+          "mean_happiness": 35.1,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-5-mono-5",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 5,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "54ba9657cc89f21a022023199a049ac698985c8c1dab7dc3065615939bcb6dfb",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 81.1,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 88.1,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 83.4,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 83.85,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-8-mono-0",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 8,
+        "monotonic": 0,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "3cd003b35f6810b7cec866ff8a3d61eb5a9650b216f7103f59ca9ac26f274687",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.5,
+          "mean_happiness": 13.0,
+          "married_rate": 0.5,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.5,
+          "mean_happiness": 13.0,
+          "married_rate": 0.5,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.7,
+          "mean_happiness": 15.5,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.7,
+          "mean_happiness": 15.5,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-8-mono-4",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 8,
+        "monotonic": 4,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "b179b873654be3487fe91ca556f8c4207c71de94f56d6bd19a8b39ac328ddd0e",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9,
+          "mean_happiness": 45.3,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 47.0,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 33.9,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 35.9,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dims-8-mono-8",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 8,
+        "monotonic": 8,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "4962f49c734d6acc230abe37a30d0753184bb221c729189a6294e277d44e59a0",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 73.3,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 76.8,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 76.65,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-group10",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "group10",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "bf79b0479b8440dd1da3d1ea3a2af2edf1a9fdb2de9404c8c68f8f8a25a42775",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-group10-reversed",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "group10-reversed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "20fc4c5c84085a49a80ee549af5eda8d536816624240f0671befc707277ffa27",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.8,
+          "mean_happiness": 80.0,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.8,
+          "mean_happiness": 80.0,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.7,
+          "mean_happiness": 70.0,
+          "married_rate": 0.7,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-group2",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "group2",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "3c6f50bbbdb5ab117fc133854b2fa65a9bfbb6cb1ec26270be6f690214bbe983",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 82.65,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 79.0,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 73.4,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 77.45,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-group9",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "group9",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "9fa75fa6924b2d48fce2e9522fc3a5e02bbb4089296bad7cc7e4a0f7c3a2aed8",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9,
+          "mean_happiness": 47.6,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 46.25,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.8,
+          "mean_happiness": 38.9,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.8,
+          "mean_happiness": 38.9,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-normal",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "normal",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "54ba9657cc89f21a022023199a049ac698985c8c1dab7dc3065615939bcb6dfb",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 71.35,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 77.5,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 68.15,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 65.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "dist-uniform",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "uniform",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "ae74e2dbb6e6eb2dbb765d24f55a052661dcce3c86b29df58b7194c7bece9db7",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 44.55,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 46.3,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 55.85,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.8,
+          "mean_happiness": 56.55,
+          "married_rate": 0.8,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "half-group1",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-1"
+      },
+      "initial_market_sha256": "e7ccf82fa1526b2ca6051119bbf0b89995e53c1dee42f7e76b89c1954029c85c",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 61.82727272727273,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 61.35454545454545,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 63.08181818181818,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9272727272727272,
+          "mean_happiness": 59.345454545454544,
+          "married_rate": 0.9272727272727272,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "1": 55
+      }
+    },
+    {
+      "name": "half-group10",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-10"
+      },
+      "initial_market_sha256": "0655e57c38b74c57463c4cdb61fa7547fb4684cd8b992e3bf178673cb85c6dad",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 63.472727272727276,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 67.33636363636364,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 64.21818181818182,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 65.83636363636364,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "10": 55
+      }
+    },
+    {
+      "name": "half-group2",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-2"
+      },
+      "initial_market_sha256": "ffdfdec225ab543434bd70aade4ae37df9e33d6e25655e681f2855b474b219be",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 67.99090909090908,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.42727272727273,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.61818181818182,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 66.7,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "2": 55
+      }
+    },
+    {
+      "name": "half-group3",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-3"
+      },
+      "initial_market_sha256": "2e65b6b8af1c30bbc3fc3748c292ea6b2c7fc8aa0055a4f6c1bbdfbf07853cd3",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9454545454545454,
+          "mean_happiness": 61.28181818181818,
+          "married_rate": 0.9454545454545454,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 55.92727272727273,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 65.41818181818182,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9272727272727272,
+          "mean_happiness": 60.42727272727273,
+          "married_rate": 0.9272727272727272,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "3": 55
+      }
+    },
+    {
+      "name": "half-group4",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-4"
+      },
+      "initial_market_sha256": "ee415470e420993aeca30d9b53ad38044adb5e3f8f37501e0f761f8b4f23ed96",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 65.65454545454546,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.00909090909091,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 60.21818181818182,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 60.61818181818182,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "4": 55
+      }
+    },
+    {
+      "name": "half-group6",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-6"
+      },
+      "initial_market_sha256": "9794e85f17c110ef37a3a29697916dc2b70f1d074c0e962e188634013c9036f6",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 65.14545454545454,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 63.60909090909091,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9272727272727272,
+          "mean_happiness": 62.627272727272725,
+          "married_rate": 0.9272727272727272,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 65.2090909090909,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "6": 55
+      }
+    },
+    {
+      "name": "half-group7",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-7"
+      },
+      "initial_market_sha256": "a9fc3ecc1f182a3875dda457f59ffa462831659978e66e87f6d3c3418f9326cd",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 57.46363636363636,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 52.027272727272724,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9454545454545454,
+          "mean_happiness": 54.336363636363636,
+          "married_rate": 0.9454545454545454,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 50.518181818181816,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "7": 55
+      }
+    },
+    {
+      "name": "half-group8",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-8"
+      },
+      "initial_market_sha256": "f757f7535b4125c37eba4798b43c62d0e5c5e09b55bf533ed4a47f6b45075975",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 64.27272727272727,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 62.61818181818182,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 62.45454545454545,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9454545454545454,
+          "mean_happiness": 62.472727272727276,
+          "married_rate": 0.9454545454545454,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "8": 55
+      }
+    },
+    {
+      "name": "half-group9",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "half-9"
+      },
+      "initial_market_sha256": "7895d943392e481935e0492adaefd5a1ff56e4e43c1e8fd8af7f808a92af99d5",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9272727272727272,
+          "mean_happiness": 62.027272727272724,
+          "married_rate": 0.9272727272727272,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9090909090909091,
+          "mean_happiness": 61.472727272727276,
+          "married_rate": 0.9090909090909091,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 62.04545454545455,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9454545454545454,
+          "mean_happiness": 61.372727272727275,
+          "married_rate": 0.9454545454545454,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 55,
+        "9": 55
+      }
+    },
+    {
+      "name": "people-1100",
+      "config": {
+        "people": 1100,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "e75d8833935e9e06b17663168e58d740330aff5bcd54e349f0869fa168d0929d",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 65.755,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 61.605,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.98,
+          "mean_happiness": 63.82,
+          "married_rate": 0.98,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.99,
+          "mean_happiness": 61.715,
+          "married_rate": 0.99,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 100,
+        "2": 100,
+        "3": 100,
+        "4": 100,
+        "5": 100,
+        "6": 100,
+        "7": 100,
+        "8": 100,
+        "9": 100,
+        "10": 100,
+        "r": 100
+      }
+    },
+    {
+      "name": "people-20",
+      "config": {
+        "people": 20,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix"
+      },
+      "initial_market_sha256": "10ea4fa5e70bf694b9936777f4ff7078a42c49a2ba70e8c96587b02264e268f7",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 68.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 68.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 80.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 80.75,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 2,
+        "2": 2,
+        "3": 2,
+        "4": 2,
+        "5": 2,
+        "6": 2,
+        "7": 2,
+        "8": 2,
+        "9": 2,
+        "10": 2
+      }
+    },
+    {
+      "name": "people-22",
+      "config": {
+        "people": 22,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "e66110880493cb1b76fe93b779a399eabf0d66ae7c017086d663dce16f393c31",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.25,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 2,
+        "2": 2,
+        "3": 2,
+        "4": 2,
+        "5": 2,
+        "6": 2,
+        "7": 2,
+        "8": 2,
+        "9": 2,
+        "10": 2,
+        "r": 2
+      }
+    },
+    {
+      "name": "people-330",
+      "config": {
+        "people": 330,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "ef8045d2a6f7ba4c264dde19207d9c18e00f9e71ee95a36a091b05d5b753ae68",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9666666666666667,
+          "mean_happiness": 63.75,
+          "married_rate": 0.9666666666666667,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.166666666666664,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 64.43333333333334,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 60.9,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 30,
+        "2": 30,
+        "3": 30,
+        "4": 30,
+        "5": 30,
+        "6": 30,
+        "7": 30,
+        "8": 30,
+        "9": 30,
+        "10": 30,
+        "r": 30
+      }
+    },
+    {
+      "name": "reference",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 54.15,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 60.0,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 60.6,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 65.9,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "roster-mix",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix"
+      },
+      "initial_market_sha256": "fd78fb8307baa8dc31fe133e5ceaba27f7183d354b81832cf18d2e6caa82a2fd",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.77272727272727,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.5,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 58.54545454545455,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9090909090909091,
+          "mean_happiness": 49.86363636363637,
+          "married_rate": 1.0,
+          "negative_rate": 0.09090909090909091,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 11,
+        "2": 11,
+        "3": 11,
+        "4": 11,
+        "5": 11,
+        "6": 11,
+        "7": 11,
+        "8": 11,
+        "9": 11,
+        "10": 11
+      }
+    },
+    {
+      "name": "roster-random90",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "random90"
+      },
+      "initial_market_sha256": "4b2fdbe93bd511c001476df006480c45c4a77a030868c4b09a891ff8649d3ede",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9090909090909091,
+          "mean_happiness": 48.59090909090909,
+          "married_rate": 0.9090909090909091,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 46.72727272727273,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9090909090909091,
+          "mean_happiness": 57.54545454545455,
+          "married_rate": 0.9090909090909091,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 58.5,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 11,
+        "r": 99
+      }
+    },
+    {
+      "name": "roster-solo",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "solo"
+      },
+      "initial_market_sha256": "8b28d1315555472d2ba30b57a78e56b9b885eac0a13b6170930cbd1eb6f845ec",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 62.55,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9636363636363636,
+          "mean_happiness": 59.47727272727273,
+          "married_rate": 0.9636363636363636,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9818181818181818,
+          "mean_happiness": 63.49090909090909,
+          "married_rate": 0.9818181818181818,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9454545454545454,
+          "mean_happiness": 60.42727272727273,
+          "married_rate": 0.9454545454545454,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 110
+      }
+    },
+    {
+      "name": "roster-solo-random",
+      "config": {
+        "people": 110,
+        "rounds": 50,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "solo-random"
+      },
+      "initial_market_sha256": "1db0bba6b1dc313c6bb62598cfc4516fc4d4df90acf6201f22f1a772acf6aa2d",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 61.755,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.99,
+          "mean_happiness": 55.4,
+          "married_rate": 0.99,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.82,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.99,
+          "mean_happiness": 57.63,
+          "married_rate": 0.99,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "5": 100,
+        "r": 10
+      }
+    },
+    {
+      "name": "rounds-150",
+      "config": {
+        "people": 110,
+        "rounds": 150,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 56.2,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 66.65,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 62.95,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.4,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "rounds-5",
+      "config": {
+        "people": 110,
+        "rounds": 5,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 52.7,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 42.3,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 0.9,
+          "mean_happiness": 44.3,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 0.9,
+          "mean_happiness": 44.3,
+          "married_rate": 0.9,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    },
+    {
+      "name": "rounds-500",
+      "config": {
+        "people": 110,
+        "rounds": 500,
+        "bonus": 100,
+        "dims": 5,
+        "monotonic": 2,
+        "distribution": "mixed",
+        "roster": "mix-random"
+      },
+      "initial_market_sha256": "96ee237c810958a14473bd3a68dc3ed4687e48e3b0a973af653bfdd6f4f2bb33",
+      "metrics": {
+        "baseline": {
+          "positive_rate": 1.0,
+          "mean_happiness": 54.35,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "market_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 66.65,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "learning_only": {
+          "positive_rate": 1.0,
+          "mean_happiness": 59.45,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        },
+        "combined": {
+          "positive_rate": 1.0,
+          "mean_happiness": 63.4,
+          "married_rate": 1.0,
+          "negative_rate": 0.0,
+          "group5_faults": 0,
+          "all_faults": 0,
+          "fault_examples": []
+        }
+      },
+      "seat_counts": {
+        "1": 10,
+        "2": 10,
+        "3": 10,
+        "4": 10,
+        "5": 10,
+        "6": 10,
+        "7": 10,
+        "8": 10,
+        "9": 10,
+        "10": 10,
+        "r": 10
+      }
+    }
+  ]
+}

@@ -49,20 +49,84 @@ class Courtship:
 class Player5(Player):
 	"""Retain viable matches and use observed alternatives to decide when to commit."""
 
+	# One uniform pseudo-observation per value. Ads are selected claims, so
+	# even a large market contributes at most two date-equivalents per field.
+	PRIOR_STRENGTH = 11.0
+	AD_WEIGHT = 0.25
+	AD_MASS_LIMIT = 2.0
+
 	def __init__(self, snapshot: PlayerSnapshot, ctx: GameContext) -> None:
 		super().__init__(snapshot, ctx)
 		self.history: dict[int, Courtship] = {}
 		self.first_scores: deque[float] = deque(maxlen=64)
 		self.available: tuple[Candidate, ...] = ()
-		self.prior_ideal_loss = unknown_ideal_cost(self.profile, self.monotonic)
+		self.current_singles = self.people
+		self.traits = [[0] * 11 for _ in range(self.dims)]
+		self.desires = [[0] * 11 for _ in range(self.dims)]
+		self.ad_traits = [[0] * 11 for _ in range(self.dims)]
+		self.ad_desires = [[0] * 11 for _ in range(self.dims)]
+		self.observed_ads: dict[int, Advertisement] = {}
+		self.observed_dates: set[int] = set()
+		self._refresh_costs()
+
+	def _pmf(self, dim: int, *, desire: bool = False) -> tuple[float, ...]:
+		direct = self.desires[dim] if desire else self.traits[dim]
+		ads = self.ad_desires[dim] if desire else self.ad_traits[dim]
+		ad_weight = min(self.AD_WEIGHT, self.AD_MASS_LIMIT / max(1, sum(ads)))
+		weights = [
+			count + ad_weight * advertised + self.PRIOR_STRENGTH / 11
+			for count, advertised in zip(direct, ads, strict=True)
+		]
+		total = sum(weights)
+		return tuple(weight / total for weight in weights)
+
+	def _refresh_costs(self) -> None:
+		"""Cache expectations after new evidence, never once per candidate."""
 		self.unknown_trait_cost = tuple(
-			sum(self._loss(i, target, value) for value in range(11)) / 11
+			sum(p * self._loss(i, target, value) for value, p in enumerate(self._pmf(i)))
 			for i, target in enumerate(self.ideal)
 		)
 		self.unknown_seek_cost = tuple(
-			sum(self._loss(i, target, value) for target in range(11)) / 11
+			sum(
+				p * self._loss(i, target, value)
+				for target, p in enumerate(self._pmf(i, desire=True))
+			)
 			for i, value in enumerate(self.profile)
 		)
+		self.prior_ideal_loss = sum(self.unknown_seek_cost)
+
+	def _observe_ads(self, candidates: tuple[Candidate, ...]) -> None:
+		changed = False
+		for candidate in candidates:
+			person = candidate.index
+			if person in self.observed_ads or person in self.observed_dates:
+				continue
+			ad = candidate.ad
+			self.observed_ads[person] = ad
+			self.ad_traits[ad.own_dim][ad.own_value] += 1
+			self.ad_desires[ad.seek_dim][ad.seek_value] += 1
+			changed = True
+		if changed:
+			self._refresh_costs()
+
+	def _observe_date(self, person: int, observed: Profile, desired: Profile) -> None:
+		# Keep one first-date sample per person, not one sample per repeat.
+		# A full observation replaces that person's partial ad evidence.
+		if person in self.observed_dates:
+			return
+		self.observed_dates.add(person)
+		ad = self.observed_ads.pop(person, None)
+		if ad is not None:
+			self.ad_traits[ad.own_dim][ad.own_value] -= 1
+			self.ad_desires[ad.seek_dim][ad.seek_value] -= 1
+		for dim, value in enumerate(observed):
+			self.traits[dim][value] += 1
+		# Exact copying already triggers our lie safeguard; do not train its
+		# fallback estimate on the same suspicious claim it is discounting.
+		if not mirrors_projection(desired, self.profile):
+			for dim, value in enumerate(desired):
+				self.desires[dim][value] += 1
+		self._refresh_costs()
 
 	def _loss(self, dim: int, want: int, have: int) -> int:
 		gap = want - have
@@ -84,6 +148,10 @@ class Player5(Player):
 
 	def choose_dates(self, candidates: tuple[Candidate, ...], turn: RoundContext) -> list[int]:
 		self.available = candidates
+		# Candidates omit reserved repeat pairs and incompatible people. Only
+		# the public singles count measures people actually leaving the market.
+		self.current_singles = turn.singles
+		self._observe_ads(candidates)
 		known = []
 		fresh = []
 		for candidate in candidates:
@@ -91,7 +159,8 @@ class Player5(Player):
 			if match is None:
 				if turn.rounds_left >= 2:
 					fresh.append(candidate)
-			elif match.score > 0 and match.retry_round <= turn.round:
+			# On the last round, there is no later chance to retry a known match.
+			elif match.score > 0 and (turn.rounds_left == 1 or match.retry_round <= turn.round):
 				known.append(candidate)
 		known.sort(
 			key=lambda candidate: self._match_value(self.history[candidate.index], turn.round),
@@ -110,12 +179,16 @@ class Player5(Player):
 		attempts = min(fresh, rounds_left // 2)
 		if attempts == 0:
 			return 0.0
+		# This still distinguishes a full and depleted market after the five-
+		# attempt cap is reached. Square root makes the discount gradual.
+		remaining = max(0.0, min(1.0, (self.current_singles - 1) / max(1, self.people - 1)))
+		market_factor = sqrt(remaining)
 		if not self.first_scores:
-			return max(0.0, self.bonus * 0.25)
+			return max(0.0, self.bonus * 0.25) * market_factor
 		# A recent upper-quartile score estimates the upside of a new date.
 		scores = sorted(self.first_scores)
 		upper = scores[3 * (len(scores) - 1) // 4]
-		return max(0.0, upper) * (1 - 0.65 ** min(attempts, 5))
+		return max(0.0, upper) * (1 - 0.65 ** min(attempts, 5)) * market_factor
 
 	def _match_value(self, match: Courtship, round_number: int) -> float:
 		if match.offer_round and round_number - match.offer_round <= 3:
@@ -146,6 +219,7 @@ class Player5(Player):
 		return max(known, self._search_reservation(date))
 
 	def decide(self, date: DateContext, observed: Profile, stated_ideal: Profile) -> Decision:
+		self._observe_date(date.partner, observed, stated_ideal)
 		own_loss = decrement(self.ideal, observed, self.monotonic)
 		partner_loss = decrement(stated_ideal, self.profile, self.monotonic)
 		match = self.history.get(date.partner)
